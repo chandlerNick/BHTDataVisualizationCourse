@@ -160,17 +160,17 @@ for (i in 1:nrow(final_matrix)) {
 }
 
 # Normalize by the number of countries in each continent
-for (i in 1:nrow(continent_matrix)) {
-  for (j in 1:ncol(continent_matrix)) {
-    source_continent <- rownames(continent_matrix)[i]
-    target_continent <- colnames(continent_matrix)[j]
-    # Normalize by the number of countries in the source continent
-    num_countries_in_source <- length(continent_countries[[source_continent]])
-    if (num_countries_in_source > 0) {
-      continent_matrix[i, j] <- continent_matrix[i, j] / num_countries_in_source
-    }
-  }
-}
+# for (i in 1:nrow(continent_matrix)) {
+#   for (j in 1:ncol(continent_matrix)) {
+#     source_continent <- rownames(continent_matrix)[i]
+#     target_continent <- colnames(continent_matrix)[j]
+#     # Normalize by the number of countries in the source continent
+#     num_countries_in_source <- length(continent_countries[[source_continent]])
+#     if (num_countries_in_source > 0) {
+#       continent_matrix[i, j] <- continent_matrix[i, j] / num_countries_in_source
+#     }
+#   }
+# }
 
 # Create a PDF for the continent-level chord diagram
 pdf("continent_relationships_chord.pdf", width = 12, height = 12)
@@ -254,7 +254,7 @@ circos.track(track.index = 1, panel.fun = function(x, y) {
 title("World Region Relationships")
 dev.off()
 
-# # Also create an interactive HTML version if desired
+# # Also create an interactive HTML version could be cool for the final version
 # if (requireNamespace("htmlwidgets", quietly = TRUE) && 
 #     requireNamespace("networkD3", quietly = TRUE)) {
 #   library(networkD3)
