@@ -176,32 +176,20 @@ for (i in 1:nrow(final_matrix)) {
 pdf("continent_relationships_chord.pdf", width = 12, height = 12)
 
 # Create a more pleasant color palette for continents
-# Using a custom palette with visually distinct but harmonious colors
+# Using a custom palette with darker, more saturated colors for better visibility
 continent_colors <- c(
-  "Africa" = "#1E88E5",       # Blue
-  "Antarctica" = "#00ACC1",   # Cyan
-  "Arctic Ocean" = "#26C6DA", # Light Cyan
-  "Asia" = "#F44336",         # Red
-  "Atlantic Ocean" = "#039BE5", # Light Blue
-  "Australia" = "#8BC34A",    # Light Green
-  "Central America" = "#FF9800", # Orange
-  "Europe" = "#7CB342",       # Green
-  "Indian Ocean" = "#29B6F6", # Sky Blue
-  "Middle East" = "#FF7043",  # Deep Orange
-  "North America" = "#9575CD", # Purple
-  "Oceania" = "#4DB6AC",      # Teal
-  "Pacific Ocean" = "#4FC3F7", # Light Blue
-  "South America" = "#FFC107", # Amber
-  "Southeast Asia" = "#EC407A" # Pink
+  "Africa" = "#0D47A1",       # Darker Blue
+  "Asia" = "#B71C1C",         # Darker Red
+  "Central America" = "#E65100", # Darker Orange
+  "Europe" = "#33691E",       # Darker Green
+  "Middle East" = "#D84315",  # Darker Deep Orange
+  "North America" = "#4527A0", # Darker Purple
+  "Oceania" = "#00695C",      # Darker Teal
+  "South America" = "#FF8F00", # Darker Amber
+  "Southeast Asia" = "#AD1457", # Darker Pink
+  "Arctic Region" = "#006064", # Darker Cyan
+  "AsiaEurope" = "#4E342E"    # Darker Brown
 )
-
-# For any continents not in our predefined list, use a fallback palette
-missing_continents <- setdiff(unique_continents, names(continent_colors))
-if (length(missing_continents) > 0) {
-  additional_colors <- colorRampPalette(brewer.pal(8, "Pastel1"))(length(missing_continents))
-  names(additional_colors) <- missing_continents
-  continent_colors <- c(continent_colors, additional_colors)
-}
 
 # Rename "Central America and the Caribbean" to "Central America" in the data
 final_continents[final_continents == "Central America and the Caribbean"] <- "Central America"
@@ -223,7 +211,7 @@ if ("Central America and the Caribbean" %in% rownames(continent_matrix)) {
 chordDiagram(
   continent_matrix,
   grid.col = continent_colors,
-  transparency = 0.2,  
+  transparency = 0.1,  
   directional = TRUE,
   direction.type = "arrows",
   link.arr.type = "big.arrow",
@@ -231,7 +219,8 @@ chordDiagram(
   link.largest.ontop = TRUE,
   annotationTrack = "grid",
   preAllocateTracks = list(track.height = 0.1),
-  annotationTrackHeight = c(0.05, 0.1)
+  annotationTrackHeight = c(0.05, 0.1),
+  grid.border = "black"  # Add thin black borders around sectors
 )
 
 # Add labels for continents
@@ -250,8 +239,10 @@ circos.track(track.index = 1, panel.fun = function(x, y) {
   )
 }, bg.border = NA)
 
-# Add title
-title("World Region Relationships")
+# Add title with larger font size
+title(main = "Relationships Between Continents", 
+      cex.main = 1.8,  # Increase title size (default is 1.2)
+      font.main = 2)   # Bold font
 dev.off()
 
 # # Also create an interactive HTML version could be cool for the final version
