@@ -203,6 +203,7 @@ vertex_sizes <- min_size + (node_degrees - min_degree) * (max_size - min_size) /
 country_display_names <- V(g)$name
 country_display_names[country_display_names == "United States"] <- "USA"
 country_display_names[country_display_names == "Korea, South"] <- "South Korea"
+country_display_names[country_display_names == "Turkey (Turkiye)"] <- "Turkey"  # Rename to just Turkey
 
 # Determine which countries to show labels for
 show_labels <- node_degrees >= 15
@@ -211,6 +212,16 @@ show_labels[V(g)$name == "Ukraine"] <- TRUE  # Always show Ukraine
 show_labels[V(g)$name == "Micronesia, Federated States of"] <- FALSE  # Hide Micronesia
 show_labels[V(g)$name == "Brazil"] <- TRUE  # Always show Brazil
 show_labels[V(g)$name == "Mexico"] <- TRUE  # Always show Mexico
+show_labels[V(g)$name == "Turkey (Turkiye)"] <- TRUE  # Always show Turkey
+show_labels[V(g)$name == "Saudi Arabia"] <- TRUE  # Always show Saudi Arabia
+show_labels[V(g)$name == "Argentina"] <- TRUE  # Always show Argentina
+show_labels[V(g)$name == "South Africa"] <- TRUE  # Always show South Africa
+show_labels[V(g)$name == "Egypt"] <- TRUE  # Always show Egypt
+show_labels[V(g)$name == "Namibia"] <- TRUE  # Always show Namibia
+show_labels[V(g)$name == "Morocco"] <- TRUE  # Always show Morocco
+show_labels[V(g)$name == "Vietnam"] <- TRUE  # Always show Vietnam
+show_labels[V(g)$name == "Venezuela"] <- TRUE  # Always show Venezuela
+show_labels[V(g)$name == "Chile"] <- TRUE  # Always show Chile
 
 # Open PDF device
 pdf("country_relationships_network.pdf", width = 12, height = 10)
