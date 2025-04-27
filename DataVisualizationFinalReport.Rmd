@@ -1,0 +1,25 @@
+---
+title: "DataVisualizationFinalReport"
+author: "Luisa Kalkert, Luke Richard, Nicholas Chandler"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Introduction
+
+# Question 1
+
+# Question 2
+
+# Question 3
+
+# Question 4
+
+# Question 5
+
+# Conclusion & References
