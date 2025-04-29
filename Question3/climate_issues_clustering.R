@@ -17,7 +17,7 @@ col_names_and_nas <- function(df) {
 }
 
 ### Read in data
-full_df <- read.csv("clean_data.csv")
+full_df <- read.csv("../data/clean_data.csv")
 col_names_and_nas(full_df)  # Diagnostics
 
 # Trim data
