@@ -4,8 +4,11 @@
 
 library(reticulate)
 library(text)
+library(plotly)
 library(ggplot2)
 library(gridExtra)
+library(cluster)
+library(factoextra)
 
 # Set up python dependencies for text
 use_python("C:/Users/njcha/OneDrive/Documents/.virtualenvs/r-reticulate/Scripts/python.exe", required = TRUE)
@@ -33,13 +36,18 @@ head(trim_df)
 
 
 ### Embed all text
-current_climate_issues <- trim_df$Environment..Environment...current.issues
-embeddings <- textEmbed(current_climate_issues)
-
+embedding_file <- "../data/climate_issues_embeddings_cached.rds"
+if (file.exists(embedding_file)) {
+  message("Loading cached embeddings...")
+  embeddings <- readRDS(embedding_file)
+} else {
+  message("Computing embeddings...")
+  current_climate_issues <- trim_df$Environment..Environment...current.issues
+  embeddings <- textEmbed(current_climate_issues)
+  saveRDS(embeddings, embedding_file)
+}
+embeddings <- embeddings$texts$texts  # Matrix (n_country, embed_dim)
 dim(embeddings)
-
-### Error with the embeddings
-print(embeddings)
 
 reticulate::py_config()
 reticulate::py_run_string("import nltk; print(nltk.data.path)")
@@ -48,15 +56,16 @@ reticulate::py_run_string("import nltk; print(nltk.data.path)")
 set.seed(42)
 
 # Elbow plot
-wss <- sapply(1:10, function(k) {
+max.k <- 10
+wss <- sapply(1:max.k, function(k) {
   kmeans_result <- kmeans(embeddings, centers=k, nstart=25)
   return(kmeans_result$tot.withinss)
 }) 
 
 
-elbow_plot <- data.frame(k=1:15, WSS=wss)
+elbow_plot <- data.frame(k=1:max.k, WSS=wss)
 
-ggplot(elbow_plot, aes(x=k, y=WSS)) +
+elbow_plot_gg <- ggplot(elbow_plot, aes(x=k, y=WSS)) +
   geom_line() +
   geom_point() +
   labs(title="Elbow Plot for K-means Clustering",
@@ -64,7 +73,7 @@ ggplot(elbow_plot, aes(x=k, y=WSS)) +
        y="Within-Cluster Sum of Squares (WSS)") +
   theme_minimal()
 
-optimal_k <- 7  # Set this!
+optimal_k <- 4  # Set this!
 
 kmeans_result_final <- kmeans(embeddings, centers=optimal_k, nstart=25)
 
@@ -73,6 +82,38 @@ table(kmeans_result_final$cluster)
 
 # PCA
 pca_final <- prcomp(embeddings, scale.=TRUE)
+
+pca_var <- pca_final$sdev^2
+pve <- pca_var / sum(pca_var)
+cpve <- cumsum(pve)
+
+# Create dataframe
+pca_df <- data.frame(
+  PC = factor(1:length(pve)),
+  PVE = pve,
+  CPVE = cpve
+)
+
+# Scree plot
+scree_plot <- ggplot(pca_df, aes(x = PC, y = PVE)) +
+  geom_col(fill="steelblue") +
+  geom_point(size=2) +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "red") +
+  labs(title="Scree Plot",
+       x = "Principal Component",
+       y = "Proportion of Variance Explained") +
+  theme_minimal()
+
+# CPVE plot
+cpve_plot <- ggplot(pca_df, aes(x = as.integer(as.character(PC)), y = CPVE)) +
+  geom_line(size=1, color="darkgreen") +
+  geom_point(size=2, color = "darkgreen") +
+  scale_x_continuous(breaks=1:nrow(pca_df)) +
+  labs(title="Cumlative Proportion of Variance Explained",
+       x = "Number of Principal Components",
+       y = "Cumulative PVE") +
+  theme_minimal()
+
 
 ### Plots
 
@@ -93,5 +134,52 @@ plot_without_clusters <- ggplot(pca_data_no_cluster, aes(x=PC1, y=PC2)) +
 
 # Combine side-by-side
 grid.arrange(plot_with_clusters, plot_without_clusters, ncol=2)
+
+# Prepare data
+pca_data_3d <- data.frame(pca_final$x[,1:3], cluster=as.factor(kmeans_result_final$cluster))
+colnames(pca_data_3d)[1:3] <- c("PC1", "PC2", "PC3")
+
+# Plot 1: With clusters
+plot_3d_clusters <- plot_ly(pca_data_3d,
+                            x = ~PC1, y= ~PC2, z= ~PC3,
+                            color=~cluster, colors= "Set1",
+                            type="scatter3d", mode="markers",
+                            marker=list(size=4)) %>%
+  layout(title="3D PCA of Text Embeddings eith K-means Clusters")
+
+# Plot 2: Without clusters
+plot_3d_nocolor <- plot_ly(pca_data_3d,
+                           x = ~PC1, y = ~PC2, z = ~PC3,
+                           type = "scatter3d", mode = "markers",
+                           marker = list(size=4, color="steelblue")) %>%
+  layout(title="3D PCA of Text Embeddings with K-Means Clusters")
+
+
+# Silhouette plots of the cluster GOF
+sil <- silhouette(kmeans_result_final$cluster, dist(scale(embeddings)))
+sil_plot <- fviz_silhouette(sil)
+
+
+# Save plots
+ggsave("climate_issues_clustering_elbow_plot.pdf", plot = elbow_plot_gg, width = 6, height = 4)
+ggsave("climate_issues_clustering_pca_with_clusters_2PCs.pdf", plot = plot_with_clusters, width = 6, height = 4)
+ggsave("climate_issues_clustering_pca_no_clusters_2PCs.pdf", plot = plot_without_clusters, width = 6, height = 4)
+ggsave("climate_issues_clustering_silhouette_plot.pdf", plot = sil_plot, width=6, height=4)
+
+# View plots
+plot_3d_clusters
+plot_3d_nocolor
+elbow_plot_gg
+plot_with_clusters
+plot_without_clusters
+sil_plot
+scree_plot
+cpve_plot
+
+
+
+
+
+
 
 
