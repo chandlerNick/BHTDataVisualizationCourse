@@ -5,7 +5,7 @@ library(tidyr)
 
 options(width = 300)
 
-df <- read.csv("countries.csv")
+df <- read.csv("../data/countries.csv")
 
 print(cat(colnames(df), sep = "\n"))
 
@@ -20,7 +20,7 @@ bad_values <- c('Akrotiri', 'American Samoa', 'Antarctica', 'Antigua and Barbuda
                 'Montserrat', 'Navassa Island', 'New Caledonia', 'Niue', 'Norfolk Island', 'Northern Mariana Islands',
                 'Palmyra Atoll', 'Paracel Islands', 'Pitcairn Islands', 'Saint Barthelemy', 'Saint Helena, Ascension, and Tristan da Cunha',
                 'Saint Martin', 'Saint Pierre and Miquelon', 'Sint Maarten', 'Spratly Islands', 'Svalbard', 'Tokelau',
-                'Turks and Caicos Islands', 'Virgin Islands', 'Wake Island', 'Wallis and Futuna')
+                'Turks and Caicos Islands', 'Virgin Islands', 'Wake Island', 'Wallis and Futuna', 'World')
 
 df_clean <- df %>%
   filter(if_all(everything(), ~ !. %in% bad_values))
@@ -29,5 +29,5 @@ length(bad_values)
 nrow(df)
 nrow(df_clean)
 
-write.csv(df_clean, "clean_data.csv", row.names = FALSE)
+write.csv(df_clean, "../data/clean_data.csv", row.names = FALSE)
 

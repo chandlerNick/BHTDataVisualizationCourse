@@ -82,6 +82,7 @@ table(kmeans_result_final$cluster)
 
 # PCA
 pca_final <- prcomp(embeddings, scale.=TRUE)
+pca_final$sdev
 
 pca_var <- pca_final$sdev^2
 pve <- pca_var / sum(pca_var)
@@ -90,18 +91,19 @@ cpve <- cumsum(pve)
 # Create dataframe
 pca_df <- data.frame(
   PC = factor(1:length(pve)),
+  var = pca_var,
   PVE = pve,
   CPVE = cpve
 )
 
 # Scree plot
-scree_plot <- ggplot(pca_df, aes(x = PC, y = PVE)) +
+scree_plot <- ggplot(pca_df, aes(x = PC, y = var)) +
   geom_col(fill="steelblue") +
   geom_point(size=2) +
   geom_hline(yintercept = 1, linetype = "dashed", color = "red") +
   labs(title="Scree Plot",
        x = "Principal Component",
-       y = "Proportion of Variance Explained") +
+       y = "Variance") +
   theme_minimal()
 
 # CPVE plot

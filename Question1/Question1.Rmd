@@ -1,0 +1,274 @@
+---
+title: "Question 1"
+author: "Luisa Kalkert, Luke Richard, Nicholas Chandler"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+```
+
+# Introduction
+
+In this section, we ask the question: "How does the amount of arable land (or geographic information more generally) relate to selected quality of life indicators?"
+
+The Geographic information we have is:
+
+[Info here]
+
+The Quality of Life indicators are:
+
+[Info here]
+
+We begin the analysis by reading in the data (and filtering the relevant columns) as is done in the following R code.
+
+```{r}
+# Function to display the columns and nan counts
+col_names_and_nas <- function(df) {
+  for (i in seq_along(df)) {
+    cat(colnames(df)[i], ":", sum(is.na(df[[i]])), "\n")
+  }
+}
+
+# read data
+full_df <- read.csv("../data/clean_data.csv", header = TRUE)
+
+# Trim data
+cols_to_keep <- c("Geography..Map.references", "Geography..Geographic.coordinates", "Geography..Area...land", "Geography..Area...total", "Geography..Climate", "Geography..Land.use...agricultural.land", "Economy..Real.GDP.per.capita", "People.and.Society..Population...total", "People.and.Society..Population.growth.rate", "People.and.Society..Birth.rate", "People.and.Society..Death.rate", "People.and.Society..Maternal.mortality.ratio", "People.and.Society..Infant.mortality.rate...total", "People.and.Society..Life.expectancy.at.birth...total.population" ,"People.and.Society..Physician.density" ,"Communications..Telephones...mobile.cellular...subscriptions.per.100.inhabitants", "Communications..Internet.users...percent.of.population")
+
+trim_df <- full_df[,cols_to_keep]
+trim_df$Country <- full_df[,1]
+rownames(trim_df) <- full_df[,1]
+
+# Status report
+col_names_and_nas(trim_df)
+
+```
+
+We now concern ourselves with the cleaning of the selected columns as many have strings mixed in with numeric values.
+
+```{r}
+library(stringr)
+head(trim_df)
+
+# Geography..Area...land
+trim_df$Geography..Area...land <- as.numeric(gsub(",", "", str_extract(trim_df$Geography..Area...land, "[0-9,]+")))
+
+# Rename column
+colnames(trim_df)[colnames(trim_df) == "Geography..Area...land"] <- "Land.sqkm"
+
+
+
+# Geography..Area...total
+trim_df$Geography..Area...total <- as.numeric(gsub(",", "", str_extract(trim_df$Geography..Area...total, "[0-9,]+")))
+
+# Rename column
+colnames(trim_df)[colnames(trim_df) == "Geography..Area...total"] <- "Total.sqkm"
+
+
+
+# Geography..Climate
+trim_df$Geography..Climate <- str_extract(trim_df$Geography..Climate, "^[^;]+")
+
+# Rename column
+colnames(trim_df)[colnames(trim_df) == "Geography..Climate"] <- "Climate"
+
+
+
+# Geography..Land.use...agricultural.land
+trim_df$Geography..Land.use...agricultural.land <- as.numeric(sub("%", "", str_extract(trim_df$Geography..Land.use...agricultural.land, "[0-9.]+%")))/100
+
+# Rename column
+colnames(trim_df)[colnames(trim_df) == "Geography..Land.use...agricultural.land"] <- "Arable.land.percent"
+
+
+
+# Economy..Real.GDP.per.capita
+trim_df$Economy..Real.GDP.per.capita <- as.numeric(gsub("[$,]", "", str_extract(trim_df$Economy..Real.GDP.per.capita, "\\$[0-9,]+")))
+
+# Rename column
+colnames(trim_df)[colnames(trim_df) == "Economy..Real.GDP.per.capita"] <- "Real.GDP.per.capita.USD"
+
+
+
+# People.and.Society..Population.growth.rate
+trim_df$People.and.Society..Population.growth.rate <- as.numeric(sub("%", "", str_extract(trim_df$People.and.Society..Population.growth.rate, "[0-9.]+%"))) / 100
+
+# Rename column
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Population.growth.rate"] <- "Population.growth.rate.percent"
+
+
+
+# People.and.Society..Birth.rate - births 
+trim_df$People.and.Society..Birth.rate <- as.numeric(str_extract(trim_df$People.and.Society..Birth.rate, "^[0-9]+")) / 1000
+
+# Rename column
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Birth.rate"] <- "Live.births.per.1000.people"
+
+
+
+# People.and.Society..Death.rate - deaths per person 
+trim_df$People.and.Society..Death.rate <- as.numeric(str_extract(trim_df$People.and.Society..Death.rate, "^[0-9]+")) / 1000
+
+# Rename column
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Death.rate"] <- "Deaths.per.1000.people"
+
+
+
+# People.and.Society..Maternal.mortality.ratio - deaths per live birth
+trim_df$People.and.Society..Maternal.mortality.ratio <- as.numeric(gsub(",", "", str_extract(trim_df$People.and.Society..Maternal.mortality.ratio, "^[0-9]+"))) / 100000
+
+# Rename column
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Maternal.mortality.ratio"] <- "Maternal.deaths.per.100000.live.births"
+
+
+
+# People.and.Society..Infant.mortality.rate...total - deaths per live birth
+trim_df$People.and.Society..Infant.mortality.rate...total <- as.numeric(str_extract(trim_df$People.and.Society..Infant.mortality.rate...total, "^[0-9.]+")) / 1000
+
+# Rename column
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Infant.mortality.rate...total"] <- "Infant.deaths.per.1000.live.births"
+
+
+
+# People.and.society..Life.expectancy.at.birth...total.population
+trim_df$People.and.Society..Life.expectancy.at.birth...total.population <- as.numeric(str_extract(trim_df$People.and.Society..Life.expectancy.at.birth...total.population, "^[0-9.]+"))
+
+# Rename column
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Life.expectancy.at.birth...total.population"] <- "Life.expectancy.at.birth"
+
+
+
+# People.and.Society..Physician.density
+trim_df$People.and.Society..Physician.density <- as.numeric(str_extract(trim_df$People.and.Society..Physician.density, "^[0-9.]+")) / 1000
+
+# Rename column
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Physician.density"] <- "Physicians.per.1000.people"
+
+
+
+# Communications..Telephones...mobile.cellular...subscriptions.per.100.inhabitants
+trim_df$Communications..Telephones...mobile.cellular...subscriptions.per.100.inhabitants <- as.numeric(str_extract(trim_df$Communications..Telephones...mobile.cellular...subscriptions.per.100.inhabitants, "^[0-9]+")) / 100
+
+# Rename column
+colnames(trim_df)[colnames(trim_df) == "Communications..Telephones...mobile.cellular...subscriptions.per.100.inhabitants"] <- "Avg.cellphone.subscriptions.per.person"
+
+
+
+# Communications..Internet.users...percent.of.population
+trim_df$Communications..Internet.users...percent.of.population <- as.numeric(str_extract(trim_df$Communications..Internet.users...percent.of.population, "^[0-9.]+")) / 100
+
+# Rename column
+colnames(trim_df)[colnames(trim_df) == "Communications..Internet.users...percent.of.population"] <- "Internet.users.percent.of.population"
+
+
+
+# People.and.Society..Population...total
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Population...total"] <- "Total.population"
+
+
+
+# Geography..Map.references
+colnames(trim_df)[colnames(trim_df) == "Geography..Map.references"] <- "Continent"
+
+
+# Note, you must re-run the whole notebook to not have issues with the nan overwriting
+head(trim_df)
+trim_df
+
+```
+
+Note that we have removed entries that may not be countries so our numbers may not reflect those of other surveys. The preprocessing is however, accessible.
+
+Let us begin by examining total land and arable land by continent.
+
+The continents we examine are:
+```{r}
+continents <- unlist(unique(trim_df$Continent))
+continents
+```
+
+```{r}
+# Land per continent
+continent_land <- trim_df %>%
+  group_by(Continent) %>%
+  summarise(TotalLand = sum(Land.sqkm, na.rm = TRUE)) %>%
+  arrange(desc(TotalLand))
+
+# Bar chart
+ggplot(continent_land, aes(x=reorder(Continent, -TotalLand), y=TotalLand, fill=Continent)) +
+  geom_bar(stat="identity", width=0.7, color="black") +
+  scale_y_continuous(labels=scales::comma) +
+  labs(
+    title="Total Land Area by Continent",
+    x = "Continent",
+    y = "Land Area (sq. km)"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(angle=45, hjust=1)  # Rotate x-axis labels
+  ) +
+  scale_fill_brewer(palette = "Paired")
+```
+
+
+Now we examine those with the most arable land
+
+```{r}
+continent_arable_land <- trim_df %>%
+  mutate(ArableLand = (Arable.land.percent) * Land.sqkm) %>%
+  group_by(Continent) %>%
+  summarise(TotalArableLand = sum(ArableLand, na.rm = TRUE)) %>%
+  arrange(desc(TotalArableLand))
+
+
+# Bar chart
+ggplot(continent_arable_land, aes(x=reorder(Continent, -TotalArableLand), y=TotalArableLand, fill=Continent)) +
+  geom_bar(stat="identity", width=0.7, color="black") +
+  scale_y_continuous(labels=scales::comma) +
+  labs(
+    title="Total Arable Land Area by Continent",
+    x = "Continent",
+    y = "Arable Land Area (sq. km)"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(angle=45, hjust=1)  # Rotate x-axis labels
+  ) +
+  scale_fill_brewer(palette = "Paired")
+```
+
+
+
+
+Look at a sub dataframe
+
+   map references, climate, Area total, agricultural land, forest, population total, maternal mortality ratio, infant morality rate (total), life expectancy at birth (total), physician density, current health expenditure, education expenditure, cellphones per 100 inhabitants
+   
+   Do pca - expect the health vars to make up one pc
+ 
+ Plot maps of all countries with their values for a PC after "meaning" of the PC has been deduced.
+ 
+   Get biplot
+ 
+   Look at triplot too
+ 
+ Look at pairs plots
+ 
+ Cluster using the elbow method (on loadings and the original data)
+ 
+   Look at the elbow plots and with/without cluster plots for 2 PCs
+ 
+ Use the map references to incorporate categorical variables: 
+ 
+   boxplots of all numerical vars separated by the categorical variable
+ 
+ Do a categorical to categorical comparison
+
+
+
