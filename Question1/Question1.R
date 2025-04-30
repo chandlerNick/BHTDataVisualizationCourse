@@ -3,9 +3,29 @@
 # Question 1: How does the amount of arable land (or geographic information) relate to different quality of life indicators?
 
 
-# Read in data
+col_names_and_nas <- function(df) {
+  for (i in seq_along(df)) {
+    cat(colnames(df)[i], ":", sum(is.na(df[[i]])), "\n")
+  }
+}
 
-# Extract and clean all data
+# Read in data
+full_df <- read.csv("../data/clean_data.csv", header = TRUE)
+
+# Trim data
+cols_to_keep <- c("Geography..Map.references", "Geography..Geographic.coordinates", "Geography..Area...land", "Geography..Area...total", "Geography..Climate", "Geography..Land.use...agricultural.land", "Economy..Real.GDP.per.capita", "People.and.Society..Population...total", "People.and.Society..Population.growth.rate", "People.and.Society..Birth.rate", "People.and.Society..Death.rate", "People.and.Society..Maternal.mortality.ratio", "People.and.Society..Infant.mortality.rate...total", "People.and.Society..Life.expectancy.at.birth...total.population" ,"People.and.Society..Physician.density" ,"Communications..Telephones...mobile.cellular...subscriptions.per.100.inhabitants", "Communications..Internet.users...percent.of.population")
+
+trim_df <- full_df[,cols_to_keep]
+trim_df$Country <- full_df[,1]
+rownames(trim_df) <- full_df[,1]
+
+# Status report
+col_names_and_nas(trim_df)
+
+# Clean data
+
+
+# Extract and clean all data 
 # Extract geographic information
 #   Environment: Climate -- first semicolon delimited section
 #   Geography: Map references
