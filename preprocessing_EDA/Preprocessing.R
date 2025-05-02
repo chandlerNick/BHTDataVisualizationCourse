@@ -20,10 +20,13 @@ bad_values <- c('Akrotiri', 'American Samoa', 'Antarctica', 'Antigua and Barbuda
                 'Montserrat', 'Navassa Island', 'New Caledonia', 'Niue', 'Norfolk Island', 'Northern Mariana Islands',
                 'Palmyra Atoll', 'Paracel Islands', 'Pitcairn Islands', 'Saint Barthelemy', 'Saint Helena, Ascension, and Tristan da Cunha',
                 'Saint Martin', 'Saint Pierre and Miquelon', 'Sint Maarten', 'Spratly Islands', 'Svalbard', 'Tokelau',
-                'Turks and Caicos Islands', 'Virgin Islands', 'Wake Island', 'Wallis and Futuna', 'World')
+                'Turks and Caicos Islands', 'Virgin Islands', 'Wake Island', 'Wallis and Futuna', 'World', 'Greenland')
 
 df_clean <- df %>%
   filter(if_all(everything(), ~ !. %in% bad_values))
+
+df_clean$Geography..Map.references[df_clean$Geography..Map.references == "Arctic Region"] <- "Europe"
+df_clean$Geography..Map.references[df_clean$Geography..Map.references == "AsiaEurope"] <- "Europe"
 
 length(bad_values)
 nrow(df)
