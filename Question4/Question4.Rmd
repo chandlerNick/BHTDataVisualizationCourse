@@ -1,0 +1,138 @@
+---
+title: "Question 4"
+author: "Luisa Kalkert, Luke Richard, Nicholas Chandler"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(stringr)
+library(ggplot2)
+library(dplyr)
+```
+
+# How do various statistics differ between males and females across the world?
+
+```{r}
+col_names_and_nas <- function(df) {
+  for (i in seq_along(df)) {
+    na_count <- sum(is.na(df[[i]]))
+    empty_count <- sum(df[[i]] == "", na.rm = TRUE)
+    cat(colnames(df)[i], ":", na_count + empty_count, "\n")
+  }
+}
+
+# Read in data
+full_df <- read.csv("../data/clean_data.csv", header = TRUE)
+
+# Trim data
+sub_cols <- grep("male|female", colnames(full_df),ignore.case=TRUE)
+cols_to_keep <- colnames(full_df[, sub_cols])
+cols_to_keep <- c(cols_to_keep, c("Geography..Map.references", "Geography..Geographic.coordinates", "Economy..Real.GDP.per.capita", "People.and.Society..Population...total", "People.and.Society..Birth.rate", "People.and.Society..Maternal.mortality.ratio", "People.and.Society..Infant.mortality.rate...total", "People.and.Society..Life.expectancy.at.birth...total.population", "People.and.Society..Population.growth.rate"))
+
+trim_df <- full_df[-78,cols_to_keep]  # Note, we omit vatican city here due to lack of gender specific data
+trim_df$Country <- full_df[-78,1]
+rownames(trim_df) <- full_df[-78,1]
+
+# Status report
+col_names_and_nas(trim_df)
+```
+
+Clean the data
+
+```{r}
+trim_df
+
+# Economy..Real.GDP.per.capita
+trim_df$Economy..Real.GDP.per.capita <- as.numeric(gsub("[$,]", "", str_extract(trim_df$Economy..Real.GDP.per.capita, "\\$[0-9,]+")))
+colnames(trim_df)[colnames(trim_df) == "Economy..Real.GDP.per.capita"] <- "Real.GDP.per.capita.USD"
+
+# People.and.Society..Population.growth.rate
+trim_df$People.and.Society..Population.growth.rate <- as.numeric(sub("%", "", str_extract(trim_df$People.and.Society..Population.growth.rate, "[0-9.]+%"))) / 100
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Population.growth.rate"] <- "Population.growth.rate.percent"
+
+# People.and.Society..Birth.rate - births 
+trim_df$People.and.Society..Birth.rate <- as.numeric(str_extract(trim_df$People.and.Society..Birth.rate, "^[0-9]+")) / 1000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Birth.rate"] <- "Live.births.per.1000.people"
+
+# People.and.Society..Population...total
+trim_df$People.and.Society..Population...total <- as.numeric(gsub(",", "", str_extract(trim_df$People.and.Society..Population...total, "^[0-9,]+")))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Population...total"] <- "Total.population"
+
+# People.and.Society..Maternal.mortality.ratio - deaths per live birth
+trim_df$People.and.Society..Maternal.mortality.ratio <- as.numeric(gsub(",", "", str_extract(trim_df$People.and.Society..Maternal.mortality.ratio, "^[0-9]+"))) / 100000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Maternal.mortality.ratio"] <- "Maternal.deaths.per.100000.live.births"
+
+# People.and.Society..Infant.mortality.rate...total - deaths per live birth
+trim_df$People.and.Society..Infant.mortality.rate...total <- as.numeric(str_extract(trim_df$People.and.Society..Infant.mortality.rate...total, "^[0-9.]+")) / 1000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Infant.mortality.rate...total"] <- "Infant.deaths.per.1000.live.births"
+
+# People.and.society..Life.expectancy.at.birth...total.population
+trim_df$People.and.Society..Life.expectancy.at.birth...total.population <- as.numeric(str_extract(trim_df$People.and.Society..Life.expectancy.at.birth...total.population, "^[0-9.]+"))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Life.expectancy.at.birth...total.population"] <- "Life.expectancy.at.birth"
+
+# Geography..Map.references
+colnames(trim_df)[colnames(trim_df) == "Geography..Map.references"] <- "Continent"
+
+# People.and.Society..Population...male
+trim_df$People.and.Society..Population...male <- as.numeric(gsub(",", "", str_extract(trim_df$People.and.Society..Population...male, "^\\s*[0-9,]+")))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Population...male"] <- "Male.population"
+
+# People.and.Society..Population...female
+trim_df$People.and.Society..Population...female <- as.numeric(gsub(",", "", str_extract(trim_df$People.and.Society..Population...female, "^\\s*[0-9,]+")))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Population...female"] <- "Female.population"
+
+# Economy..Youth.unemployment.rate..ages.15.24....female
+
+
+# Economy..Youth.unemployment.rate..ages.15.24....male
+
+# People.and.Society..School.life.expectancy..primary.to.tertiary.education....female
+
+# People.and.Society..School.life.expectancy..primary.to.tertiary.education....male
+
+# People.and.Society..Literacy...female
+
+# People.and.Society..Literacy...male
+
+# People.and.Society..Tobacco.use...female
+
+# People.and.Society..Tobacco.use...male
+
+# People.and.Society..Life.expectancy.at.birth...female
+
+# People.and.Society..Life.expectancy.at.birth...male
+
+# People.and.Society..Infant.mortality.rate...female
+
+# People.and.Society..Infant.mortality.rate...male
+
+# People.and.Society..Median.age...female
+
+# People.and.Society..Median.age...male
+
+# People.and.Society..Population...female
+
+# People.and.Society..Population...male
+
+head(trim_df)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
