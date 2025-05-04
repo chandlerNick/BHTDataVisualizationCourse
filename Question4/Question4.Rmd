@@ -84,39 +84,63 @@ trim_df$People.and.Society..Population...female <- as.numeric(gsub(",", "", str_
 colnames(trim_df)[colnames(trim_df) == "People.and.Society..Population...female"] <- "Female.population"
 
 # Economy..Youth.unemployment.rate..ages.15.24....female
-
+trim_df$Economy..Youth.unemployment.rate..ages.15.24....female <- as.numeric(str_extract(trim_df$Economy..Youth.unemployment.rate..ages.15.24....female, "^\\s*[0-9.]+")) / 100
+colnames(trim_df)[colnames(trim_df) == "Economy..Youth.unemployment.rate..ages.15.24....female"] <- "Female.unemployment.rate.15.24"
 
 # Economy..Youth.unemployment.rate..ages.15.24....male
+trim_df$Economy..Youth.unemployment.rate..ages.15.24....male <- as.numeric(str_extract(trim_df$Economy..Youth.unemployment.rate..ages.15.24....male, "^\\s*[0-9.]+")) / 100
+colnames(trim_df)[colnames(trim_df) == "Economy..Youth.unemployment.rate..ages.15.24....male"] <- "Male.unemployment.rate.15.24"
+
 
 # People.and.Society..School.life.expectancy..primary.to.tertiary.education....female
+trim_df$People.and.Society..School.life.expectancy..primary.to.tertiary.education....female <- as.numeric(str_extract(trim_df$People.and.Society..School.life.expectancy..primary.to.tertiary.education....female, "^\\s*[0-9]+"))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..School.life.expectancy..primary.to.tertiary.education....female"] <- "Female.expected.years.of.education"
 
 # People.and.Society..School.life.expectancy..primary.to.tertiary.education....male
+trim_df$People.and.Society..School.life.expectancy..primary.to.tertiary.education....male <- as.numeric(str_extract(trim_df$People.and.Society..School.life.expectancy..primary.to.tertiary.education....male, "^\\s*[0-9]+"))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..School.life.expectancy..primary.to.tertiary.education....male"] <- "Male.expected.years.of.education"
 
 # People.and.Society..Literacy...female
+trim_df$People.and.Society..Literacy...female <- as.numeric(str_extract(trim_df$People.and.Society..Literacy...female, "^\\s*[0-9.]+")) / 100
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Literacy...female"] <- "Female.literacy.rate"
 
 # People.and.Society..Literacy...male
+trim_df$People.and.Society..Literacy...male <- as.numeric(str_extract(trim_df$People.and.Society..Literacy...male, "^\\s*[0-9.]+")) / 100
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Literacy...male"] <- "Male.literacy.rate"
 
 # People.and.Society..Tobacco.use...female
+trim_df$People.and.Society..Tobacco.use...female <- as.numeric(str_extract(trim_df$People.and.Society..Tobacco.use...female, "^\\s*[0-9.]+")) / 100
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Tobacco.use...female"] <- "Female.proportion.of.tobacco.users"
 
 # People.and.Society..Tobacco.use...male
+trim_df$People.and.Society..Tobacco.use...male <- as.numeric(str_extract(trim_df$People.and.Society..Tobacco.use...male, "^\\s*[0-9.]+")) / 100
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Tobacco.use...male"] <- "Male.proportion.of.tobacco.users"
 
 # People.and.Society..Life.expectancy.at.birth...female
+trim_df$People.and.Society..Life.expectancy.at.birth...female <- as.numeric(str_extract(trim_df$People.and.Society..Life.expectancy.at.birth...female, "^\\s*[0-9.]+"))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Life.expectancy.at.birth...female"] <- "Female.life.expectancy.at.birth"
 
 # People.and.Society..Life.expectancy.at.birth...male
+trim_df$People.and.Society..Life.expectancy.at.birth...male <- as.numeric(str_extract(trim_df$People.and.Society..Life.expectancy.at.birth...male, "^\\s*[0-9.]+"))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Life.expectancy.at.birth...male"] <- "Male.life.expectancy.at.birth"
 
 # People.and.Society..Infant.mortality.rate...female
+trim_df$People.and.Society..Infant.mortality.rate...female <- as.numeric( str_extract(trim_df$People.and.Society..Infant.mortality.rate...female, "^\\s*[0-9.]+")) / 1000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Infant.mortality.rate...female"] <- "Female.IMR.deaths.per.birth"
 
 # People.and.Society..Infant.mortality.rate...male
+trim_df$People.and.Society..Infant.mortality.rate...male <- as.numeric( str_extract(trim_df$People.and.Society..Infant.mortality.rate...male, "^\\s*[0-9.]+")) / 1000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Infant.mortality.rate...male"] <- "Male.IMR.deaths.per.birth"
 
 # People.and.Society..Median.age...female
+trim_df$People.and.Society..Median.age...female <- as.numeric( str_extract(trim_df$People.and.Society..Median.age...female, "^\\s*[0-9.]+"))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Median.age...female"] <- "Median.age.female"
 
 # People.and.Society..Median.age...male
+trim_df$People.and.Society..Median.age...male <- as.numeric( str_extract(trim_df$People.and.Society..Median.age...male, "^\\s*[0-9.]+"))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Median.age...male"] <- "Median.age.male"
 
-# People.and.Society..Population...female
-
-# People.and.Society..Population...male
-
-head(trim_df)
+head(trim_df, 10)
 
 ```
 
