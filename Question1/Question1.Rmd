@@ -560,7 +560,7 @@ plot(kde_result)
 ```
 
 
-## Star plot of each continent (median aggregate)
+## Star plot of each continent (median aggregate) NOTE: Maybe do a spider/radar plot for continents.
 
 Variables Examined:
 
@@ -619,8 +619,6 @@ stars(
   main = "Star Plots of Median Metrics by Region",
   cex = 0.8,
 )
-
-
 ```
 
 
