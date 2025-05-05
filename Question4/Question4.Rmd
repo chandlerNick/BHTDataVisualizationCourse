@@ -10,6 +10,8 @@ knitr::opts_chunk$set(echo = TRUE)
 library(stringr)
 library(ggplot2)
 library(dplyr)
+library(tidyr)
+library(ggrepel)
 ```
 
 # How do various statistics differ between males and females across the world?
@@ -42,8 +44,6 @@ col_names_and_nas(trim_df)
 Clean the data
 
 ```{r}
-trim_df
-
 # Economy..Real.GDP.per.capita
 trim_df$Economy..Real.GDP.per.capita <- as.numeric(gsub("[$,]", "", str_extract(trim_df$Economy..Real.GDP.per.capita, "\\$[0-9,]+")))
 colnames(trim_df)[colnames(trim_df) == "Economy..Real.GDP.per.capita"] <- "Real.GDP.per.capita.USD"
@@ -145,9 +145,329 @@ head(trim_df, 10)
 ```
 
 
+# Begin Analysis
+
+### Simple Male vs. Female KDE and Grouped Bar Charts
+
+Should do 3d KDE for each of the plots done with 2d in addition. 
+
+Also maps could be done, especially on the gap analysis ones and *juicy* topics e.g. life expectancy.
+
+```{r}
+colnames(trim_df)
+```
+### Population
+```{r}
+agg_df<- aggregate(cbind(Male.population, Female.population) ~ Continent, data = trim_df, sum, na.rm=TRUE)
+
+agg_df <- trim_df %>%
+  group_by(Continent) %>%
+  summarise(Male = sum(Male.population, na.rm=TRUE),
+            Female = sum(Female.population, na.rm = TRUE)) %>%
+  mutate(Total = Male + Female) %>%
+  arrange(desc(Total)) %>%
+  select(-Total) %>%
+  pivot_longer(cols = c(Male, Female), names_to = "Gender", values_to = "Population")
+
+ggplot(agg_df, aes(x = reorder(Continent, -Population, sum), y=Population, fill=Gender)) +
+  geom_bar(stat="identity", position="dodge") +
+  labs(title="Total Male and Female Population by Continent",
+       x="Continent", y="Population") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle=45, hjust=1)) +
+  scale_fill_manual(values = c("Male" = "blue", "Female" = "red"))
+```
+
+
+KDE Function Definition
+```{r}
+plot_two_kde_plots_on_same_axes <- function(x1, x2,
+                                            label1,
+                                            label2,
+                                            title, 
+                                            xlab,
+                                            col1 = "blue",
+                                            col2 = "red", 
+                                            lwd=2, legend.pos="topright", rug.alpha=0.4, ...) {
+  x1 <- na.omit(x1)
+  x2 <- na.omit(x2)
+  
+  xlim = range(c(x1,x2))
+  
+  plot(density(x1),
+       xlab=xlab, main=title, xlim=xlim,
+       col=col1, lwd=lwd, ...)
+  lines(density(x2), col=col2, lwd=lwd)
+  legend(legend.pos, legend=c(label1, label2), col=c(col1, col2), lwd=lwd)
+  
+  # Add a color coded rug
+  rug(x1, col=adjustcolor(col1, alpha.f=rug.alpha), side=1)
+  rug(x2, col=adjustcolor(col2, alpha.f=rug.alpha), side=1)
+}
+```
+
+
+### Median Age Across Genders
+```{r}
+plot_two_kde_plots_on_same_axes(trim_df$Median.age.female, trim_df$Median.age.male, "Female Median Age", "Male Median Age", "Median Age of Females and Males", "Median Age (years since birth)")
+```
+
+
+### Infant Mortality Ratio (deaths per birth)
+```{r}
+plot_two_kde_plots_on_same_axes(trim_df$Female.IMR.deaths.per.birth, trim_df$Male.IMR.deaths.per.birth, "Female IMR", "Male IMR", "Infant Mortality Ratio (IMR) of Males and Females", "IMR (Deaths per Birth)")
+```
+
+
+### Life Expectancy
+```{r}
+plot_two_kde_plots_on_same_axes(trim_df$Male.life.expectancy.at.birth, trim_df$Female.life.expectancy.at.birth, "Male Life Expectancy", "Female Life Expectancy", "Life Expectancy of Males and Females", "Expected Years of Life After Birth", legend.pos="topleft")
+```
+
+
+### Proportion of population using tobacco
+```{r}
+plot_two_kde_plots_on_same_axes(trim_df$Female.proportion.of.tobacco.users, trim_df$Male.proportion.of.tobacco.users, "Female", "Male", "Proportion of Population Using Tobacco", "Proportion of Population")
+```
+
+### Literacy Rate
+```{r}
+plot_two_kde_plots_on_same_axes(trim_df$Male.literacy.rate, trim_df$Female.literacy.rate, "Male", "Female", "Literacy Rate of Males and Females", "Literacy Rate (Proportion of Population)", legend.pos="topleft")
+```
+
+
+### Expected Years of Education
+```{r}
+plot_two_kde_plots_on_same_axes(trim_df$Male.expected.years.of.education, trim_df$Female.expected.years.of.education, "Male", "Female", "Expected Years of Education (Primary to Tertiary)", "Years")
+```
+
+### Unemployment Rate 15-24
+```{r}
+plot_two_kde_plots_on_same_axes(trim_df$Male.unemployment.rate.15.24, trim_df$Female.unemployment.rate.15.24, "Male", "Female", "Unemployment Rate of Males and Females 15-24 Years Old", "Unemployment Rate (Proportion of Population)")
+```
 
 
 
+
+
+
+# Look at intra-country differences of things like education -> Proxy for sexism
+
+### Differences considered (Female - Male):
+
+- Expected Years of Education
+
+- Literacy Rate
+
+- Life Expectancy
+
+```{r}
+trim_df$Diff.Expected.YOE <- trim_df$Female.expected.years.of.education - trim_df$Male.expected.years.of.education
+trim_df$Diff.Literacy.Rate <- (trim_df$Female.literacy.rate - trim_df$Male.literacy.rate) * 100
+trim_df$Diff.Life.Expectancy <- trim_df$Female.life.expectancy.at.birth - trim_df$Male.life.expectancy.at.birth
+
+aggregate_by_continent <- function(df, continent_col = "Continent", ..., na.rm=TRUE) {
+  value_cols <- quos(...)
+  df %>%
+    group_by(.data[[continent_col]]) %>%
+    summarise(across(!!!value_cols, ~mean(.x, na.rm=na.rm), .names ="mean_{.col}")) %>%
+    pivot_longer(cols=-all_of(continent_col), names_to="Variable", values_to="Values") %>%
+    rename(Continent= all_of(continent_col))
+}
+
+agg_education_df <- aggregate_by_continent(trim_df, "Continent", "Diff.Expected.YOE")
+agg_litrate_df <- aggregate_by_continent(trim_df, "Continent", "Diff.Literacy.Rate")
+agg_life_expect_df <- aggregate_by_continent(trim_df, "Continent", "Diff.Life.Expectancy")
+```
+
+Plot the continent average bar charts:
+```{r}
+par(mfrow=c(1,3))
+agg_education_df
+agg_litrate_df
+agg_life_expect_df
+
+plot_diff_by_continent <- function(df, title, ylab) {
+  ggplot(df, aes(x = reorder(Continent, Values), y = Values, fill = Continent)) +
+    geom_col(show.legend = FALSE) +
+    labs(title = title, x = "Continent", y = ylab) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle=45, hjust=1)) +
+    coord_flip()
+}
+
+plot_diff_by_continent(agg_education_df,
+                       title="Avg. Gender Gap in Expected Years of Education",
+                       ylab="Female - Male (Years)")
+
+plot_diff_by_continent(agg_litrate_df,
+                       title="Avg. Gender Gap in Literacy Rate",
+                       ylab = "Female - Male (%)")
+
+plot_diff_by_continent(agg_life_expect_df,
+                       title = "Avg. Gender Gap in Life Expectancy",
+                       ylab = "Female - Male (Years)")
+
+```
+
+
+# PCA on gendered cols
+
+```{r}
+gendered_df <- trim_df[,c("Male.population", "Female.population", "Median.age.male", "Median.age.female", "Male.IMR.deaths.per.birth", "Female.IMR.deaths.per.birth", "Male.life.expectancy.at.birth", "Female.life.expectancy.at.birth")]
+
+pca_result <- prcomp(na.omit(gendered_df), center = TRUE, scale. = TRUE)
+
+summary(pca_result)
+
+raw_variance <- pca_result$sdev^2
+
+pve <- raw_variance / sum(raw_variance)
+
+cumulative_pve = cumsum(pve)
+
+pca_performance_data <- data.frame(
+  PC = factor(1:length(pve), levels = 1:length(pve)),
+  RawVariance = raw_variance,
+  PVE = pve,
+  CumulativePVE = cumulative_pve
+)
+```
+
+
+PC Variances Plot:
+```{r}
+ggplot(pca_performance_data, aes(x=PC, y=RawVariance)) +
+  geom_line(aes(group=1), color="red", size=1) +
+  geom_point(aes(color="red"), size=3)+
+  geom_hline(yintercept=1, linetype="dotted", color="black")
+  labs(
+    title = "Scree Plot (Raw Variance)", 
+    x = "Principal Components",
+    y = "Raw Variance"
+  ) +
+  theme_minimal() + 
+  theme(axis.text.x = element_text(angle = 45, hjust=1))
+```
+
+The first two principal components aggregate *information*, in the sense that if we view variance as information and values larger than one an aggregation of information (since all variables were standardized), the first two principal components have variance larger than one.
+
+
+Cumulative Proportion of Variance Explained (CPVE) plot:
+```{r}
+ggplot(pca_performance_data, aes(x = PC, y = CumulativePVE, group=1)) +
+  geom_line(color="blue", size=1) +
+  geom_point(color="blue", size=3) +
+  geom_hline(yintercept=0.9, linetype="dotted", color="black") +
+  geom_hline(yintercept=0.95, linetype="dotted", color="red") +
+  labs(
+    title = "Cumulative Proportion of Variance Explained (PVE)",
+    x = "Principal Components",
+    y = "Cumulative PVE" 
+  ) +
+  theme_minimal()
+```
+
+To capture 90% of the variance, two principal components are needed.
+
+To capture 95% percent of the variance, three principal components are needed.
+
+Here we plot the loading vectors of the PCA on the axes of the first and second principal components.
+```{r, fig.width=10, fig.height=8}
+# Create dataframe for loadings
+loadings_df <- as.data.frame(pca_result$rotation[, 1:2])
+loadings_df$varname <- rownames(loadings_df)
+
+ggplot(loadings_df, aes(x = PC1, y = PC2)) +
+  geom_segment(aes(x = 0, y = 0, xend = PC1, yend = PC2), 
+               arrow = arrow(length = unit(0.2,"cm")), color = "blue") +
+  geom_text_repel(aes(label = varname), size = 3, max.overlaps = 100) +
+  labs(title = "PCA Biplot: Loadings Only") +
+  theme_minimal()
+```
+
+
+From the PCA we can see that, perhaps obviously, most of the variance is contained in the variable types rather than the gender. While each country may have differing values for both males and females, the measurement taken has more of an effect than the subsetting of the population measured. Still, we do see slight differences, most notably in the infant mortality rates between males and females.
+
+To interpret the Biplot in the classical manner:
+
+- PC1 appears to contain information about length of life, summarizing the metrics: life expectancy, median age, and infant mortality rate. Larger values of PC1 appear to occur in countries with less death of children and longer life spans.
+
+- PC2 appears to contain population information, with large values indicating larger populations.
+
+Note the similarity to the PCA in question 1, there appears to be a trend of "richness" and "size".
+
+Here we plot the most *extreme* observations defined: 
+$$\text{extreme_score}_i = \sqrt{\text{PC}1_i^2 + \text{PC}2_i^2}$$
+```{r, fig.width=10, fig.height=8}
+meta_df <- trim_df[, c("Country", "Continent")]
+# Get PCA scores (observations)
+scores_df <- as.data.frame(pca_result$x[, 1:2])
+scores_df$Country <- rownames(scores_df)
+
+# Add distance from origin in PC1-PC2 space
+scores_df <- scores_df %>%
+  mutate(Distance = sqrt(PC1^2 + PC2^2))
+
+# Keep top 10 extreme countries - euclidean norm of first two principal components
+top_extremes <- scores_df %>%
+  arrange(desc(Distance)) %>%
+  slice_head(n = 50)
+
+
+top_extremes <- top_extremes %>%
+  left_join(meta_df, by = "Country")
+
+# Plot
+ggplot(top_extremes, aes(x = PC1, y = PC2, label = Country, color = Continent)) +
+  geom_point(size = 2) +
+  geom_text_repel(
+    size = 2,
+    max.overlaps = Inf,        # allow all to be plotted
+    force = 2,                 # increase repulsion strength
+    force_pull = 0.1,          # balance between point and label
+    box.padding = 0.5,         # more space around text
+    point.padding = 0.3,       # space between text and point
+    segment.color = "grey50",  # optional connector color
+    segment.size = 0.4
+  ) +
+  geom_hline(yintercept=0, linetype="dotted", color="black") +
+  geom_vline(xintercept=0, linetype="dotted", color="black") + 
+  labs(title = "Top 50 Most Extreme Countries in PC1–PC2 Space",
+       x = "PC1", y = "PC2") +
+  theme_minimal() +
+  scale_color_brewer(palette = "Paired")
+
+```
+
+
+
+# Pairs plots
+
+```{r}
+pairs(gendered_df)
+
+```
+
+### Linear Regression of Life Expectancy
+```{r}
+female.lm <- lm(trim_df$Female.life.expectancy.at.birth ~ trim_df$Male.life.expectancy.at.birth)
+male.lm <- lm(trim_df$Male.life.expectancy.at.birth ~ trim_df$Female.life.expectancy.at.birth)
+
+summary(female.lm)
+summary(male.lm)
+
+plot(trim_df$Male.life.expectancy.at.birth, trim_df$Female.life.expectancy.at.birth, main="Female as a Function of Male Life Expectancy", xlab="Male Life Expectancy at Birth (Years)", ylab="Female Life Expectancy at Birth (Years)")
+abline(female.lm, col="red", lwd=2)
+abline(male.lm, col="blue", lwd=2)
+
+plot(trim_df$Female.life.expectancy.at.birth, trim_df$Male.life.expectancy.at.birth, main="Male as a Function of Female Life Expectancy", ylab="Male Life Expectancy at Birth (Years)", xlab="Female Life Expectancy at Birth (Years)")
+abline(female.lm, col="red", lwd=2)
+abline(male.lm, col="blue", lwd=2)
+
+```
+
+From these two plots with regression lines, we can see that the female life expectancy has a larger intercept than the male life expectancy (approximately 1.5 years on average), meaning that on average, women live longer according to the data. The increase in slope could mean that in countries with a high life expectancy among both groups, the gap in life expectancy between men and women is larger Likewise, in countries with a lower life expectancy among both groups there is a smaller gap.
 
 
 
