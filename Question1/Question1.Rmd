@@ -342,7 +342,7 @@ pca_performance_data <- data.frame(
 ```
 
 
-Scree plot:
+PCA Variances Plot:
 ```{r}
 ggplot(pca_performance_data, aes(x=PC, y=RawVariance)) +
   geom_line(aes(group=1), color="red", size=1) +
