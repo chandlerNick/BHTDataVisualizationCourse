@@ -14,6 +14,9 @@ library(tidyr)
 library(ks)
 library(rgl)
 library(scales)
+library(MASS)
+library(plotly)
+library(fmsb)
 ```
 
 # Introduction
@@ -214,7 +217,7 @@ ggplot(continent_proportion, aes(x = Continent, y = Proportion, fill = Continent
 
 ```
 
-At this point in the analysis we look at a few quality of life indicators including Real GDP per Capita and some other statistics concerning public health, again per region.
+At this point in the analysis we look at a few quality of life indicators including Real GDP per Capita and some other statistics concerning public health, again per region. (These should by put in one side-by-side analysis)
 
 ```{r}
 # Function to generate a bar chart for a specific numeric variable
@@ -438,6 +441,41 @@ ggplot(top_extremes, aes(x = PC1, y = PC2, label = Country, color = Continent)) 
 
 ```
 
+### KDE of PC Scores
+
+```{r}
+
+# Get scores
+pc_scores <- as.data.frame(pca_result$x[, 1:2])
+colnames(pc_scores) <- c("PC1", "PC2")
+
+# Define a symmetric range around (0,0)
+max_abs <- max(abs(pc_scores$PC1), abs(pc_scores$PC2))
+grid_limit <- ceiling(max_abs) + 1  # Pad
+
+# 2D KDE
+kde <- kde2d(pc_scores$PC1, pc_scores$PC2,
+             n=100, lims= c(-grid_limit, grid_limit, -grid_limit, grid_limit))
+
+# Interactive 3D surface plot
+plot_ly(
+  x=kde$x,
+  y=kde$y,
+  z=kde$z,
+  type="surface"
+) %>%
+  layout(
+    title="Interactive 3D KDE of PC1-PC2",
+    scene = list(
+      xaxis=list(title="PC1 (x)", range=c(-grid_limit, grid_limit)),
+      yaxis=list(title="PC2 (y)", range=c(-grid_limit, grid_limit)),
+      zaxis=list(title="Density")
+    )
+  )
+
+```
+
+
 ## Multivariate analysis of numeric-continuous variables
 
 ### Pairs
@@ -470,97 +508,10 @@ par(old_par)
 
 
 
-### 3D KDE
-
-In doing this, instead of creating $\binom{13}{3} = 286$ KDE plots, we opt to create 2, deciding which subset of the variables to use based on the values of the Pearson's correlation coefficient. That is, we create one using the values with the smallest total absolute correlation and one with those containing the highest total absolute correlation.
-
-Extraction of the minimum and maximum correlation triples:
-```{r}
-find_triples <- function(cor_matrix) {
-  n_vars <- nrow(cor_matrix)
-  
-  triple_correlations <- data.frame(Var1 = integer(0), Var2 = integer(0), Var3 = integer(0), TotalCorrelation = numeric(0))
-  
-  # Loop over all possible triples
-  for (i in 1:(n_vars -2)) {
-    for (j in (i+1):(n_vars -1)) {
-      for (k in (j+1):n_vars) {
-        if (i == j || i == k || j == k) {
-          continue;
-        }
-        corr_ij <- abs(cor_matrix[i, j])
-        corr_ik <- abs(cor_matrix[i, k])
-        corr_jk <- abs(cor_matrix[j, k])
-        
-        total_corr <- corr_ij + corr_ik + corr_jk
-        
-        triple_correlations <- rbind(triple_correlations, data.frame(Var1= i, Var2 = j, Var3 = k, TotalCorrelation = total_corr))
-      }
-    }
-  }
-  
-  max_triple <- triple_correlations[which.max(triple_correlations$TotalCorrelation), ]
-  min_triple <- triple_correlations[which.min(triple_correlations$TotalCorrelation), ]
-  return(list(max_triple=max_triple, min_triple=min_triple))
-}
-
-```
-
-```{r}
-# Obtain correlations
-cor_mat <- cor(na.omit(numeric_df))
-
-# Obtain Triples of highest and lowest absolute correlation
-result <- find_triples(cor_mat)
-
-# Triples' variable names
-min_triple <- colnames(numeric_df[, c(result$min_triple$Var1, result$min_triple$Var2, result$min_triple$Var3)])
-max_triple <- colnames(numeric_df[, c(result$max_triple$Var1, result$max_triple$Var2, result$max_triple$Var3)])
-
-
-# Print
-min_triple
-result$min_triple$TotalCorrelation
-
-max_triple
-result$max_triple$TotalCorrelation
-```
 
 
 
-Creation of minimally correlated KDE plot with the Gaussian kernel:
-```{r}
-scaled_numeric_df <- scale(numeric_df)
-
-min_triple_data <- as.matrix(na.omit(scaled_numeric_df[, min_triple]))
-stopifnot(is.numeric(min_triple_data), ncol(min_triple_data) == 3)
-
-H <- Hpi(x = min_triple_data)
-
-kde_result <- kde(x = min_triple_data, H = H, gridsize = rep(50, 3))
-
-# Needs work
-plot(kde_result)
-```
-
-Creation of maximally correlated KDE plot with Gaussian kernel:
-```{r}
-scaled_numeric_df <- scale(numeric_df)
-
-max_triple_data <- as.matrix(na.omit(scaled_numeric_df[, max_triple]))
-stopifnot(is.numeric(max_triple_data), ncol(max_triple_data) == 3)
-
-H <- Hpi(x = max_triple_data)
-
-kde_result <- kde(x = max_triple_data, H = H, gridsize = rep(50, 3))
-
-# Needs work
-plot(kde_result)
-
-```
-
-
-## Star plot of each continent (median aggregate) NOTE: Maybe do a spider/radar plot for continents.
+## Radar plot of each continent
 
 Variables Examined:
 
@@ -572,6 +523,11 @@ Variables Examined:
 
 - "Total.population"
 
+Statistics Considered:
+
+- Minimum
+
+- Maximum
 
 ```{r}
 star_data <- trim_df[, c("Total.sqkm", "Real.GDP.per.capita.USD", "Life.expectancy.at.birth", "Total.population")]
@@ -581,7 +537,7 @@ rownames(star_data) <- trim_df$Country
 agg_star_data <- aggregate(
   star_data, 
   by = list(Continent = trim_df$Continent), 
-  FUN = median,
+  FUN = min,
   na.rm = TRUE
 )
 rownames(agg_star_data) <- agg_star_data$Continent
@@ -595,32 +551,75 @@ colnames(star_data_scaled) <- c("Sq. km.", "GDP per capita", "Life Expectancy", 
 ```
 
 
-```{r,  fig.width=10, fig.height=8, echo=FALSE}
-
-# Define colors for each variable
-seg_cols <- rainbow(ncol(agg_star_data_scaled))
-
-# Increase right margin to make room
-old_mar <- par("mar")
-par(mar = c(2, 2, 2, 8), las=2)  
+```{r, fig.width=10, fig.height=8, echo=FALSE}
 
 
-# Plot
-stars(
-  agg_star_data_scaled,
-  xlim=c(0,10),
-  ylim=c(0,10),
-  draw.segments=TRUE,
-  labels = rownames(agg_star_data_scaled),
-  col.segments = seg_cols,
-  key.loc = c(4.5, 9),
-  key.labels = colnames(agg_star_data_scaled),
-  key.xpd = TRUE,
-  main = "Star Plots of Median Metrics by Region",
-  cex = 0.8,
+max_vals <- apply(agg_star_data_scaled, 2, max)
+min_vals <- apply(agg_star_data_scaled, 2, min)
+radar_data <- rbind(max_vals, min_vals, agg_star_data_scaled)
+
+seg_cols <- rainbow(nrow(agg_star_data_scaled))
+
+par(mar=c(3,3,3,3))
+radarchart(
+  as.data.frame(radar_data),
+  axistype=1,
+  pcol=seg_cols,
+  plwd=2,
+  plty=1,
+  cglcol="grey",
+  cglty=1,
+  axislabcol="grey",
+  caxislabels=seq(0,10,2),
+  vlcex=0.8,
+  title="Radar Plot of Minimums by Region"
 )
+legend("topright", legend=rownames(agg_star_data_scaled), col=seg_cols, lty=1, lwd=2)
 ```
 
+```{r, fig.width=10, fig.height=8, echo=FALSE}
+# For continent-wise plotting
+agg_star_data <- aggregate(
+  star_data, 
+  by = list(Continent = trim_df$Continent), 
+  FUN = max,
+  na.rm = TRUE
+)
+rownames(agg_star_data) <- agg_star_data$Continent
+agg_star_data$Continent <- NULL  # remove redundant column
+agg_star_data_scaled <- scale(agg_star_data)
+colnames(agg_star_data_scaled) <- c("Sq. km.", "GDP per capita", "Life Expectancy", "Total Pop.")
+
+# For country-wise plotting
+star_data_scaled <- scale(star_data)
+colnames(star_data_scaled) <- c("Sq. km.", "GDP per capita", "Life Expectancy", "Total Pop.")
+
+max_vals <- apply(agg_star_data_scaled, 2, max)
+min_vals <- apply(agg_star_data_scaled, 2, min)
+radar_data <- rbind(max_vals, min_vals, agg_star_data_scaled)
+
+seg_cols <- rainbow(nrow(agg_star_data_scaled))
+
+par(mar=c(3,3,3,3))
+radarchart(
+  as.data.frame(radar_data),
+  axistype=1,
+  pcol=seg_cols,
+  plwd=2,
+  plty=1,
+  cglcol="grey",
+  cglty=1,
+  axislabcol="grey",
+  caxislabels=seq(0,10,2),
+  vlcex=0.8,
+  title="Radar Plot of Maximums by Region"
+)
+legend("topright", legend=rownames(agg_star_data_scaled), col=seg_cols, lty=1, lwd=2)
+
+```
+
+
+## Star Plots of Each Country
 
 ```{r, include=FALSE, message=FALSE, warning=FALSE, results='hide'}
 pdf("figures/star_plot_all_countries.pdf", width = 20, height = 20)  # adjust size as needed
