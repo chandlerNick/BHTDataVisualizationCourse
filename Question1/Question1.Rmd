@@ -17,13 +17,16 @@ library(scales)
 library(MASS)
 library(plotly)
 library(fmsb)
+library(patchwork)
+library(tidyverse)
+library(aplpack)
 ```
 
 # Introduction
 
-In this section, we ask the question: "How does the amount of arable land (or geographic information more generally) relate to selected quality of life indicators?"
+In this section, we ask the question: "How does GDP per capita relate to selected quality of life and human-geographic metrics?"
 
-The Geographic information we have is:
+The Human-Geographic information we have is:
 
 [Info here]
 
@@ -126,16 +129,18 @@ colnames(trim_df)[colnames(trim_df) == "Geography..Map.references"] <- "Continen
 
 Note that we have removed entries that may not be countries so our numbers may not reflect those of other surveys. The preprocessing is however, accessible.
 
-Let us begin by examining total and arable land by continent.
+
 
 The continents we examine are:
 ```{r}
 continents <- unlist(unique(trim_df$Continent))
 continents
 ```
+# Individual Analysis
 
+## Basic Analysis of Aggregates of Human-Geographic Metrics
 
-
+Land, Arable Land, Proportion
 ```{r}
 # Land per continent
 continent_land <- trim_df %>%
@@ -219,6 +224,10 @@ ggplot(continent_proportion, aes(x = Continent, y = Proportion, fill = Continent
 
 At this point in the analysis we look at a few quality of life indicators including Real GDP per Capita and some other statistics concerning public health, again per region. (These should by put in one side-by-side analysis)
 
+
+
+
+
 ```{r}
 # Function to generate a bar chart for a specific numeric variable
 plot_bar_chart <- function(data, variable, group_var = "Continent", agg_fun = mean, palette = "Paired", title = NULL, y_label = NULL, x_label = "Region") {
@@ -239,7 +248,7 @@ plot_bar_chart <- function(data, variable, group_var = "Continent", agg_fun = me
   if (is.null(y_label)) y_label <- paste("Average", variable)
   
   # Plot the bar chart
-  ggplot(summary_data, aes(x = reorder(.data[[group_var]], -Aggregate), y = Aggregate, fill = .data[[group_var]])) +
+  p <- ggplot(summary_data, aes(x = reorder(.data[[group_var]], -Aggregate), y = Aggregate, fill = .data[[group_var]])) +
     geom_bar(stat = "identity", width = 0.7, color = "black") +
     scale_y_continuous(labels = scales::comma) + 
     labs(
@@ -251,55 +260,101 @@ plot_bar_chart <- function(data, variable, group_var = "Continent", agg_fun = me
     theme(
       axis.text.x = element_text(angle = 45, hjust = 1),
       legend.position = "none") +
-    scale_fill_brewer(palette = "Paired")
+    scale_fill_brewer(palette = "Paired") +
+    coord_flip()
+  return(p)
+}
+
+
+# Function to create interactive boxplot with underlying points
+plot_boxplot_with_points <- function(data, variable, group_var = "Continent", 
+                                     title = NULL, y_label = NULL, x_label = "Region", 
+                                     point_id_var = "Country") {
+  data <- na.omit(data)
+  # Check if required columns exist
+  if (!(variable %in% colnames(data))) stop(paste("Column", variable, "not found in the dataframe"))
+  if (!(group_var %in% colnames(data))) stop(paste("Group variable", group_var, "not found in the dataframe"))
+  if (!(point_id_var %in% colnames(data))) stop(paste("Hover variable", point_id_var, "not found in the dataframe"))
+
+  # Define default labels
+  if (is.null(title)) title <- paste("Distribution of", variable, "by", group_var)
+  if (is.null(y_label)) y_label <- variable
+
+  p <- ggplot(data, aes(x = .data[[group_var]], y = .data[[variable]],
+        fill=.data[[group_var]],         
+        text = paste0(
+          point_id_var, ": ", .data[[point_id_var]], "<br>",
+          variable, ": ", .data[[variable]]
+        ))) +
+    geom_boxplot(
+      width = 0.75,
+      alpha=0.25,
+      outlier.color=NA
+    ) +
+    geom_point(
+      aes(colour = .data[[group_var]]),
+      size = 1.3,
+      alpha = 1,
+      position = position_jitter( # obtain shifted points
+        seed = 1, 
+        width = .09
+      )
+    ) +
+    labs(title = title, x = x_label, y = y_label) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none") +
+    coord_flip()
+  
+  return(ggplotly(p, tooltip = "text"))  # Return interactive plot
 }
 ```
 
 
-Average real GDP per capita per region:
+Real GDP per capita per region (2021 USD):
 ```{r}
-plot_bar_chart(trim_df, "Real.GDP.per.capita.USD", title= "Average Real GDP per Capita by Region", y_label="Real GDP per Capita (2021 USD)", x_label="Region")
+Avg_GDP_Cap_Bar <- plot_bar_chart(trim_df, "Real.GDP.per.capita.USD", title= "Average Real GDP per Capita by Region", y_label="Real GDP per Capita (2021 USD)", x_label="Region")
+Box_GDP_Cap <- plot_boxplot_with_points(trim_df, "Real.GDP.per.capita.USD", title= "Average Real GDP per Capita by Region", y_label="Real GDP per Capita (2021 USD)", x_label="Region")
 ```
 
-Average number of physicians rate, "Physicians.per.1000.people":
+Number of physicians rate, "Physicians.per.1000.people":
 ```{r}
-plot_bar_chart(trim_df, "Physicians.per.1000.people", title= "Average No. Physicians per 1000 People", y_label="No. Physicians per 1000 People", x_label="Region")
+Box_Doc_Rate <- plot_boxplot_with_points(trim_df, "Physicians.per.1000.people", title= "Average No. Physicians per 1000 People", y_label="No. Physicians per 1000 People", x_label="Region")
 ```
 
-Average infant mortality rate, "Infant.deaths.per.1000.live.births":
+Infant mortality rate, "Infant.deaths.per.1000.live.births":
 ```{r}
-plot_bar_chart(trim_df, "Infant.deaths.per.1000.live.births", title= "Average Infant Mortality Rate", y_label="Infant Deaths per 1000 Live Births", x_label="Region")
+Box_IMR <- plot_boxplot_with_points(trim_df, "Infant.deaths.per.1000.live.births", title= "Average Infant Mortality Rate", y_label="Infant Deaths per 1000 Live Births", x_label="Region")
 ```
 
-Average maternal mortality rate, "Maternal.deaths.per.100000.live.births":
+Maternal mortality rate, "Maternal.deaths.per.100000.live.births":
 ```{r}
-plot_bar_chart(trim_df, "Maternal.deaths.per.100000.live.births", title= "Average Maternal Mortality Rate", y_label="Maternal Deaths per 100,000 live Births", x_label="Region")
+Box_MMR <- plot_boxplot_with_points(trim_df, "Maternal.deaths.per.100000.live.births", title= "Average Maternal Mortality Rate", y_label="Maternal Deaths per 100,000 live Births", x_label="Region")
 ```
 
-Average "Life.expectancy.at.birth":
+"Life.expectancy.at.birth":
 ```{r}
-plot_bar_chart(trim_df, "Life.expectancy.at.birth", title= "Average Life expectancy at birth", y_label="Years After Birth", x_label="Region")
+Box_Life_Expect <- plot_boxplot_with_points(trim_df, "Life.expectancy.at.birth", title= "Average Life expectancy at birth", y_label="Years After Birth", x_label="Region")
 ```
 
-Average death rate, "Deaths.per.1000.people":
+Death rate, "Deaths.per.1000.people":
 ```{r}
-plot_bar_chart(trim_df, "Deaths.per.1000.people", title= "Average Death Rate", y_label="Deaths per 1000 People", x_label="Region")
+Box_Death_Rate <- plot_boxplot_with_points(trim_df, "Deaths.per.1000.people", title= "Average Death Rate", y_label="Deaths per 1000 People", x_label="Region")
 ```
 
 
-Average birth rate, "Live.births.per.1000.people":
+Birth rate, "Live.births.per.1000.people":
 ```{r}
-plot_bar_chart(trim_df, "Live.births.per.1000.people", title= "Average Birth Rate", y_label="Live Births per 1000 people", x_label="Region")
+Box_Birth_Rate <- plot_boxplot_with_points(trim_df, "Live.births.per.1000.people", title= "Average Birth Rate", y_label="Live Births per 1000 people", x_label="Region")
 ```
 
-Average "Population.growth.rate.percent":
+Population Growth Rate"Population.growth.rate.percent":
 ```{r}
-plot_bar_chart(trim_df, "Population.growth.rate.percent", title= "Average Population Growth Rate", y_label="Percent Growth Rate", x_label="Region")
+Box_Pop_Growth_Rate <- plot_boxplot_with_points(trim_df, "Population.growth.rate.percent", title= "Average Population Growth Rate", y_label="Growth Rate", x_label="Region")
 ```
 
 Total population, "Population":
 ```{r}
-plot_bar_chart(trim_df, "Total.population", title= "Total Population", agg_fun=sum, y_label="No. of People", x_label="Region")
+Total_Pop_Bar <- plot_bar_chart(trim_df, "Total.population", title= "Total Population", y_label="No. of People", x_label="Region", agg_fun=sum)
+Box_Total_Pop <- plot_boxplot_with_points(trim_df, "Total.population", title= "Total Population", y_label="No. of People", x_label="Region")
 ```
 
 Note that the model of exponential population growth doesn't totally work here, see Africa and Asia. The failing assumption is likely gender balance.
@@ -307,14 +362,48 @@ Note that the model of exponential population growth doesn't totally work here, 
 
 Average percent of population online, "Internet.users.percent.of.population":
 ```{r}
-plot_bar_chart(trim_df, "Internet.users.percent.of.population", title= "Average Proportion of Population Online", y_label="Proportion of Internet Users", x_label="Region")
+Box_Online <- plot_boxplot_with_points(trim_df, "Internet.users.percent.of.population", title= "Average Proportion of Population Online", y_label="Proportion of Internet Users", x_label="Region")
 ```
 
 Average number of cellphone subscriptions per inhabitants, "Avg.cellphone.subscriptions.per.person":
 ```{r}
-plot_bar_chart(trim_df, "Avg.cellphone.subscriptions.per.person", title= "Average Number of Cellphone Subscriptions per Inhabitant", y_label="Subscriptions", x_label="Region")
+Box_Cell_Subs <- plot_boxplot_with_points(trim_df, "Avg.cellphone.subscriptions.per.person", title= "Average Number of Cellphone Subscriptions per Inhabitant", y_label="Subscriptions", x_label="Region")
 ```
 
+## World Total Population Bar Chart
+```{r}
+Total_Pop_Bar
+```
+
+## Plotly Boxplots
+```{r, fig.height=8, fig.width=10}
+Box_GDP_Cap
+
+Box_Total_Pop
+
+Box_Pop_Growth_Rate
+
+Box_MMR
+
+Box_IMR
+
+Box_Doc_Rate
+
+Box_Birth_Rate
+
+Box_Death_Rate
+
+Box_Life_Expect
+
+Box_Online
+
+Box_Cell_Subs
+```
+
+
+# Joint Analysis
+
+## PCA
 
 Now we will do principal components analysis on the numeric-continuous variables visualized above and visualize the biplot. (code the datapoints by region -- maybe cluster if it looks worthwhile)
 
@@ -347,25 +436,25 @@ pca_performance_data <- data.frame(
 
 PCA Variances Plot:
 ```{r}
-ggplot(pca_performance_data, aes(x=PC, y=RawVariance)) +
+raw_var_plot <- ggplot(pca_performance_data, aes(x=PC, y=RawVariance)) +
   geom_line(aes(group=1), color="red", size=1) +
-  geom_point(aes(color="red"), size=3)+
+  geom_point(color="red", size=3)+
   geom_hline(yintercept=1, linetype="dotted", color="black")
   labs(
-    title = "Scree Plot (Raw Variance)", 
+    title = "Raw Variance Plot", 
     x = "Principal Components",
     y = "Raw Variance"
   ) +
   theme_minimal() + 
-  theme(axis.text.x = element_text(angle = 45, hjust=1))
+  theme(axis.text.x = element_text(angle = 45, hjust=1), legend.position="none")
 ```
 
 
 Cumulative Proportion of Variance Explained (CPVE) plot:
 ```{r}
-ggplot(pca_performance_data, aes(x = PC, y = CumulativePVE, group=1)) +
+cpve_plot <- ggplot(pca_performance_data, aes(x = PC, y = CumulativePVE, group=1)) +
   geom_line(color="blue", size=1) +
-  geom_point(aes(color="blue"), size=3) +
+  geom_point(color="blue", size=3) +
   geom_hline(yintercept=0.9, linetype="dotted", color="black")
   labs(
     title = "Cumulative Proportion of Variance Explained (PVE)",
@@ -373,7 +462,11 @@ ggplot(pca_performance_data, aes(x = PC, y = CumulativePVE, group=1)) +
     y = "Cumulative PVE" 
   ) +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position="none")
+```
+
+```{r, fig.height=8, fig.width=10}
+raw_var_plot + cpve_plot
 ```
 
 Here we plot the loading vectors of the PCA on the axes of the first and second principal components.
@@ -443,11 +536,14 @@ ggplot(top_extremes, aes(x = PC1, y = PC2, label = Country, color = Continent)) 
 
 ### KDE of PC Scores
 
+This is a visualization of the full distribution of scores in the PC1-PC2 plane to complement the above plots. Note that from the underside of the KDE, each country and its respective values for PC1 and PC2 can be obtained.
+
 ```{r}
 
 # Get scores
 pc_scores <- as.data.frame(pca_result$x[, 1:2])
 colnames(pc_scores) <- c("PC1", "PC2")
+pc_scores$Country <- scores_df$Country
 
 # Define a symmetric range around (0,0)
 max_abs <- max(abs(pc_scores$PC1), abs(pc_scores$PC2))
@@ -457,22 +553,39 @@ grid_limit <- ceiling(max_abs) + 1  # Pad
 kde <- kde2d(pc_scores$PC1, pc_scores$PC2,
              n=100, lims= c(-grid_limit, grid_limit, -grid_limit, grid_limit))
 
-# Interactive 3D surface plot
-plot_ly(
-  x=kde$x,
-  y=kde$y,
-  z=kde$z,
-  type="surface"
-) %>%
+
+p <- plot_ly() %>%
+  add_surface(
+    x = ~kde$x,
+    y = ~kde$y,
+    z = ~t(kde$z),  # kde2d and plotly disagree here, transpose it!
+    showscale = FALSE,
+    showlegend=FALSE,
+    opacity = 0.8
+  ) %>%
+  
+  add_markers(
+    data = pc_scores,
+    x = ~PC1,
+    y = ~PC2,
+    z = rep(min(kde$z), nrow(pc_scores)) - 0.002, #slight offset below the surface
+    text = ~paste("Country: ", Country, "<br>PC1:", round(PC1, 2), "<br>PC2:", round(PC2, 2)),
+    hoverinfo = "text",
+    marker = list(color = 'cyan', size = 4),
+    type = "scatter3d",
+    mode = "markers"
+  ) %>%
+  
   layout(
-    title="Interactive 3D KDE of PC1-PC2",
+    title = "Interactive 3D KDE of PC1-PC2",
     scene = list(
-      xaxis=list(title="PC1 (x)", range=c(-grid_limit, grid_limit)),
-      yaxis=list(title="PC2 (y)", range=c(-grid_limit, grid_limit)),
-      zaxis=list(title="Density")
+      xaxis = list(title = "PC1 (x)", range = c(-grid_limit, grid_limit)),
+      yaxis = list(title = "PC2 (y)", range = c(-grid_limit, grid_limit)),
+      zaxis = list(title = "Density")
     )
   )
 
+p
 ```
 
 
@@ -480,7 +593,7 @@ plot_ly(
 
 ### Pairs
 
-Here we examine the pairs plot of all continuous variables.
+Here we examine the pairs plot of all continuous variables. From these plots, we can see pairwise relationships between different variables.
 
 ```{r, fig.width=10, fig.height=8}
 numeric_df_normalized <- scale(numeric_df)
@@ -507,7 +620,7 @@ par(old_par)
 ```
 
 
-
+One noticing is that when GDP is slightly increased, the IMR, MMR, Birth Rate, and Population Growth Rate all decrease markedly. The life expectancy and internet use increase markedly. This appears to be a power-law distribution.
 
 
 
@@ -619,7 +732,7 @@ legend("topright", legend=rownames(agg_star_data_scaled), col=seg_cols, lty=1, l
 ```
 
 
-## Star Plots of Each Country
+## Star/Face Plots of Each Country
 
 ```{r, include=FALSE, message=FALSE, warning=FALSE, results='hide'}
 pdf("figures/star_plot_all_countries.pdf", width = 20, height = 20)  # adjust size as needed
@@ -636,9 +749,48 @@ stars(
 dev.off()
 ```
 
-The full star plot is available [here](figures/star_plot_all_countries.pdf)
+```{r, include=FALSE, message=FALSE, warning=FALSE, results='hide'}
+# Get the row names and their lengths
+name_lengths <- nchar(rownames(star_data_scaled))
 
+# Create a data frame with names and lengths
+name_df <- data.frame(
+  name = rownames(star_data_scaled),
+  length = name_lengths,
+  stringsAsFactors = FALSE
+)
 
+# Sort names by length
+sorted_names <- name_df[order(name_df$length), ]
+
+# Alternate short and long names
+n <- nrow(sorted_names)
+half <- ceiling(n / 2)
+
+# Interleave: shortest, longest, 2nd shortest, 2nd longest, ...
+alternated_names <- as.vector(rbind(
+  sorted_names$name[1:half],
+  rev(sorted_names$name[(half + 1):n])
+))
+alternated_names <- alternated_names[!is.na(alternated_names)]  # remove any NA
+
+# Reorder the original dataframe
+star_data_scaled_alternated <- star_data_scaled[alternated_names, ]
+
+pdf("figures/faces_all_countries.pdf", width = 20, height = 20)  # adjust size as needed
+faces(
+  star_data_scaled_alternated,                     # Your scaled multivariate data
+  labels = rownames(star_data_scaled_alternated),  # Row labels (e.g., country names)
+  main = "Chernoff Faces of CIA World Factbook Data",
+  print.info = FALSE                    # Avoid printing mapping info
+)
+
+dev.off()
+```
+
+Star plots of each country using the same variables as the radar plots are available [here](figures/star_plot_all_countries.pdf)
+
+Faces plots of each country using the same variables as the radar plots are available [here](figures/faces_all_countries.pdf). Note that the names are hard to see due to extreme length. There was no clear workaround so double clicking on them in the plot highlights the name corresponding to the face directly below.
 
 
 
