@@ -7,11 +7,22 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-library(stringr)
-library(ggplot2)
 library(dplyr)
-library(tidyr)
+library(ggplot2)
 library(ggrepel)
+library(tidyr)
+library(ks)
+library(rgl)
+library(scales)
+library(MASS)
+library(plotly)
+library(fmsb)
+library(patchwork)
+library(tidyverse)
+library(aplpack)
+library(leaflet)
+library(rnaturalearth)
+library(countrycode)
 ```
 
 # How do various statistics differ between males and females across the world?
@@ -145,11 +156,9 @@ head(trim_df, 10)
 ```
 
 
-# Begin Analysis
+# Paired "Univariate" Analysis
 
 ### Simple Male vs. Female KDE and Grouped Bar Charts
-
-Should do 3d KDE for each of the plots done with 2d in addition. 
 
 Also maps could be done, especially on the gap analysis ones and *juicy* topics e.g. life expectancy.
 
@@ -236,7 +245,9 @@ plot_two_kde_plots_on_same_axes(trim_df$Male.literacy.rate, trim_df$Female.liter
 ```
 
 
-### Expected Years of Education
+### Expected Years of Education - 
+
+Should be a histogram? they are discrete but I want to show both distributions on one plot
 ```{r}
 plot_two_kde_plots_on_same_axes(trim_df$Male.expected.years.of.education, trim_df$Female.expected.years.of.education, "Male", "Female", "Expected Years of Education (Primary to Tertiary)", "Years")
 ```
@@ -251,7 +262,7 @@ plot_two_kde_plots_on_same_axes(trim_df$Male.unemployment.rate.15.24, trim_df$Fe
 
 
 
-# Look at intra-country differences of things like education -> Proxy for sexism
+# Look at intra-country differences of selected variables
 
 ### Differences considered (Female - Male):
 
@@ -310,8 +321,9 @@ plot_diff_by_continent(agg_life_expect_df,
 
 ```
 
+# Multivariate Analysis
 
-# PCA on gendered cols
+## PCA on gendered cols
 
 ```{r}
 gendered_df <- trim_df[,c("Male.population", "Female.population", "Median.age.male", "Median.age.female", "Male.IMR.deaths.per.birth", "Female.IMR.deaths.per.birth", "Male.life.expectancy.at.birth", "Female.life.expectancy.at.birth")]
@@ -342,12 +354,12 @@ ggplot(pca_performance_data, aes(x=PC, y=RawVariance)) +
   geom_point(aes(color="red"), size=3)+
   geom_hline(yintercept=1, linetype="dotted", color="black")
   labs(
-    title = "Scree Plot (Raw Variance)", 
+    title = "Raw Variance", 
     x = "Principal Components",
     y = "Raw Variance"
   ) +
   theme_minimal() + 
-  theme(axis.text.x = element_text(angle = 45, hjust=1))
+  theme(axis.text.x = element_text(angle = 45, hjust=1), legend.position="none")
 ```
 
 The first two principal components aggregate *information*, in the sense that if we view variance as information and values larger than one an aggregation of information (since all variables were standardized), the first two principal components have variance larger than one.
@@ -395,6 +407,8 @@ To interpret the Biplot in the classical manner:
 
 - PC2 appears to contain population information, with large values indicating larger populations.
 
+- There appears to be a contrast between male/female life expectancy and female IMR along PC1.
+
 Note the similarity to the PCA in question 1, there appears to be a trend of "richness" and "size".
 
 Here we plot the most *extreme* observations defined: 
@@ -441,15 +455,81 @@ ggplot(top_extremes, aes(x = PC1, y = PC2, label = Country, color = Continent)) 
 ```
 
 
-
-# Pairs plots
+KDE on principal components
 
 ```{r}
-pairs(gendered_df)
 
+# Get scores
+pc_scores <- as.data.frame(pca_result$x[, 1:2])
+colnames(pc_scores) <- c("PC1", "PC2")
+pc_scores$Country <- scores_df$Country
+
+# Define a symmetric range around (0,0)
+max_abs <- max(abs(pc_scores$PC1), abs(pc_scores$PC2))
+grid_limit <- ceiling(max_abs) + 1  # Pad
+
+# 2D KDE
+kde <- kde2d(pc_scores$PC1, pc_scores$PC2,
+             n=100, lims= c(-grid_limit, grid_limit, -grid_limit, grid_limit))
+
+
+p <- plot_ly() %>%
+  add_surface(
+    x = ~kde$x,
+    y = ~kde$y,
+    z = ~t(kde$z),  # kde2d and plotly disagree here, transpose it!
+    showscale = FALSE,
+    showlegend=FALSE,
+    opacity = 0.8
+  ) %>%
+  
+  add_markers(
+    data = pc_scores,
+    x = ~PC1,
+    y = ~PC2,
+    z = rep(min(kde$z), nrow(pc_scores)) - 0.002, #slight offset below the surface
+    text = ~paste("Country: ", Country, "<br>PC1:", round(PC1, 2), "<br>PC2:", round(PC2, 2)),
+    hoverinfo = "text",
+    marker = list(color = 'cyan', size = 4),
+    type = "scatter3d",
+    mode = "markers"
+  ) %>%
+  
+  layout(
+    title = "Interactive 3D KDE of PC1-PC2",
+    scene = list(
+      xaxis = list(title = "PC1 (x)", range = c(-grid_limit, grid_limit)),
+      yaxis = list(title = "PC2 (y)", range = c(-grid_limit, grid_limit)),
+      zaxis = list(title = "Density")
+    )
+  )
+
+p
 ```
 
-### Linear Regression of Life Expectancy
+
+In the KDE plot, one can observe that none of the scores are very negative along PC2. This is likely due to the fact that PC2 is made up of population primarily, population is exponentially distributed, and none of the countries have negative population. Thus the scores tend towards larger values of PC2.
+
+
+## Pairs plots
+
+```{r, fig.height=8, fig.width=10}
+par(mar = c(8,8,3,3))  # Modify margins to make the plot larger (top, left, bottom, right)
+colnames(gendered_df)
+colnames(gendered_df) <- c("Male.population", "Female.population", "Male.median.age", "Female.median.age", "Male IMR", "Female IMR", "M.Life.Expectancy", "F.Life.Expectancy")
+colnames(gendered_df)
+
+pairs(gendered_df,
+      labels = colnames(gendered_df),
+      cex.labels = 0.8,            # label size
+      font.labels = 2,             # bold
+      gap = 1,                   # spacing between plots and labels
+      upper.panel = NULL,
+      pch = 21, 
+      bg = "lightblue")         # optional: simplify upper triangle
+```
+
+## Linear Regression of Life Expectancy
 ```{r}
 female.lm <- lm(trim_df$Female.life.expectancy.at.birth ~ trim_df$Male.life.expectancy.at.birth)
 male.lm <- lm(trim_df$Male.life.expectancy.at.birth ~ trim_df$Female.life.expectancy.at.birth)
@@ -468,6 +548,96 @@ abline(male.lm, col="blue", lwd=2)
 ```
 
 From these two plots with regression lines, we can see that the female life expectancy has a larger intercept than the male life expectancy (approximately 1.5 years on average), meaning that on average, women live longer according to the data. The increase in slope could mean that in countries with a high life expectancy among both groups, the gap in life expectancy between men and women is larger Likewise, in countries with a lower life expectancy among both groups there is a smaller gap.
+
+
+
+## Linear Regression of IMR (Deaths per Birth)
+```{r}
+female.lm <- lm(trim_df$Male.IMR.deaths.per.birth ~ trim_df$Female.IMR.deaths.per.birth)
+male.lm <- lm(trim_df$Female.IMR.deaths.per.birth ~ trim_df$Male.IMR.deaths.per.birth)
+
+summary(female.lm)
+summary(male.lm)
+
+plot(trim_df$Male.IMR.deaths.per.birth, trim_df$Female.IMR.deaths.per.birth, main="Female as a Function of Male IMR", xlab="Male IMR (Deaths per Birth)", ylab="Female IMR (Deaths per Birth)")
+abline(female.lm, col="red", lwd=2)
+abline(male.lm, col="blue", lwd=2)
+
+plot(trim_df$Female.IMR.deaths.per.birth, trim_df$Male.IMR.deaths.per.birth, main="Male as a Function of Female IMR", ylab="Male IMR (Deaths per Birth)", xlab="Female IMR (Deaths per Birth)")
+abline(female.lm, col="red", lwd=2)
+abline(male.lm, col="blue", lwd=2)
+
+```
+
+Interpretation, for countries with a male (female) IMR of $x$, the predicted female (male) IMR is $\hat{y}$. A trend we can observe is that countries with a high male IMR tend to have a higher female IMR at about $1.21$ times the male IMR.
+
+
+
+# Maps
+
+Function to plot an interactive map
+```{r}
+plot_country_data <- function(df, country_col, value_col, fill_color = "YlOrRd", legend_title = NULL) {
+  df <- na.omit(df)
+  # Step 1: Add ISO3 codes
+  df$iso_a3 <- countrycode(df[[country_col]], "country.name", "iso3c")
+  df$iso_a3[df[[country_col]] == "Kosovo"] <- "XKX"  # Manually fix Kosovo
+
+  # Step 2: Get world map
+  world <- ne_countries(returnclass = "sf")
+
+  # Step 3: Join data onto world map
+  joined <- left_join(world, df[, c("iso_a3", value_col)], by = "iso_a3")
+
+  # Step 4: Set up color palette based on data
+  pal <- colorNumeric(palette = fill_color, domain = df[[value_col]], na.color = "#cccccc")
+
+  # Step 5: Make map
+  leaflet(joined) %>%
+    addTiles() %>%
+    addPolygons(
+      fillColor = ~pal(get(value_col)),  # Directly use get() for value_col
+      color = "white",
+      weight = 1,
+      opacity = 1,
+      fillOpacity = 0.8,
+      label = ~paste(name, ": ", ifelse(is.na(get(value_col)), "NA", round(get(value_col), 2))),
+      highlightOptions = highlightOptions(weight = 2, color = "#666", bringToFront = TRUE)
+    ) %>%
+    addLegend(
+      pal = pal,
+      values = df[[value_col]],
+      title = legend_title %||% value_col,
+      na.label = "No data"
+    )
+}
+```
+
+Plot the difference in expected years of education by country (female - male)
+```{r}
+colnames(trim_df)
+
+yoe_df <- trim_df[,c("Country", "Diff.Expected.YOE")]
+yoe_df
+
+params <- list(fill_color = "YlOrRd", legend_title = "Expected Difference in Education")
+plot_country_data(yoe_df, "Country", "Diff.Expected.YOE", legend_title = "Expected Difference in Education")
+```
+
+# Other Vars!
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
 
 
 
