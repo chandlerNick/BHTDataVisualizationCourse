@@ -613,23 +613,34 @@ plot_country_data <- function(df, country_col, value_col, fill_color = "YlOrRd",
 }
 ```
 
-Plot the difference in expected years of education by country (female - male)
+Plot the difference in expected years of education by country (female - male). Positive values indicate females attain more education on average.
 ```{r}
 colnames(trim_df)
 
 yoe_df <- trim_df[,c("Country", "Diff.Expected.YOE")]
 yoe_df
 
-params <- list(fill_color = "YlOrRd", legend_title = "Expected Difference in Education")
 plot_country_data(yoe_df, "Country", "Diff.Expected.YOE", legend_title = "Expected Difference in Education")
 ```
-
-# Other Vars!
 ```{r}
+dlr_df <- trim_df[,c("Country", "Diff.Literacy.Rate")]
 
+plot_country_data(dle_df, "Country", "Diff.Literacy.Rate", legend_title = "Expected Difference in Literacy Rate")
 ```
 
 
+# Other Vars!
+
+Difference in life expectancy (female - male)
+```{r}
+dle_df <- trim_df[,c("Country", "Diff.Life.Expectancy")]
+
+plot_country_data(dle_df, "Country", "Diff.Life.Expectancy", legend_title = "Expected Difference in Life Expectancy")
+```
+
+The difference in life expectancy is large in the currently warring nations of Russia, Belarus, and Ukraine, presumably because the men are being sent to fight.
+
+In the non-warring nations, we tend to see a less exaggerated but still positive difference in female and male life expectancy. That is, on average, females still tend to live longer on average.
 
 
 

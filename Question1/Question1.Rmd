@@ -20,6 +20,9 @@ library(fmsb)
 library(patchwork)
 library(tidyverse)
 library(aplpack)
+library(leaflet)
+library(rnaturalearth)
+library(countrycode)
 ```
 
 # Introduction
@@ -791,6 +794,102 @@ dev.off()
 Star plots of each country using the same variables as the radar plots are available [here](figures/star_plot_all_countries.pdf)
 
 Faces plots of each country using the same variables as the radar plots are available [here](figures/faces_all_countries.pdf). Note that the names are hard to see due to extreme length. There was no clear workaround so double clicking on them in the plot highlights the name corresponding to the face directly below.
+
+
+# Maps
+
+Function to plot an interactive map
+```{r}
+plot_country_data <- function(df, country_col, value_col, fill_color = "YlOrRd", legend_title = NULL) {
+  df <- na.omit(df)
+  # Step 1: Add ISO3 codes
+  df$iso_a3 <- countrycode(df[[country_col]], "country.name", "iso3c")
+  df$iso_a3[df[[country_col]] == "Kosovo"] <- "XKX"  # Manually fix Kosovo
+
+  # Step 2: Get world map
+  world <- ne_countries(returnclass = "sf")
+
+  # Step 3: Join data onto world map
+  joined <- left_join(world, df[, c("iso_a3", value_col)], by = "iso_a3")
+
+  # Step 4: Set up color palette based on data
+  pal <- colorNumeric(palette = fill_color, domain = df[[value_col]], na.color = "#cccccc")
+
+  # Step 5: Make map
+  leaflet(joined) %>%
+    addTiles() %>%
+    addPolygons(
+      fillColor = ~pal(get(value_col)),  # Directly use get() for value_col
+      color = "white",
+      weight = 1,
+      opacity = 1,
+      fillOpacity = 0.8,
+      label = ~paste(name, ": ", ifelse(is.na(get(value_col)), "NA", round(get(value_col), 2))),
+      highlightOptions = highlightOptions(weight = 2, color = "#666", bringToFront = TRUE)
+    ) %>%
+    addLegend(
+      pal = pal,
+      values = df[[value_col]],
+      title = legend_title %||% value_col,
+      na.label = "No data"
+    )
+}
+```
+
+
+### Per Capita Real GDP
+```{r}
+colnames(trim_df)
+gdp_df <- trim_df[,c("Country", "Real.GDP.per.capita.USD")]
+
+plot_country_data(gdp_df, "Country", "Real.GDP.per.capita.USD", legend_title = "Real GDP per Capita")
+```
+
+
+
+### Arable Land
+```{r}
+al_df <- trim_df[,c("Country", "Arable.land.percent")]
+
+plot_country_data(al_df, "Country", "Arable.land.percent", legend_title = "Proportion of arable land")
+```
+
+
+### IMR
+```{r}
+imr_df <- trim_df[,c("Country", "Infant.deaths.per.1000.live.births")]
+imr_df$Infant.deaths.per.1000.live.births <- imr_df$Infant.deaths.per.1000.live.births*1000
+
+plot_country_data(imr_df, "Country", "Infant.deaths.per.1000.live.births", legend_title = "IMR (deaths per 1000 births)")
+```
+
+### MMR
+```{r}
+mmr_df <- trim_df[,c("Country", "Maternal.deaths.per.100000.live.births")]
+mmr_df$Maternal.deaths.per.100000.live.births <- mmr_df$Maternal.deaths.per.100000.live.births * 1000
+
+plot_country_data(mmr_df, "Country", "Maternal.deaths.per.100000.live.births", legend_title = "Maternal Deaths per 1000 Births")
+```
+
+
+### Birth Rate
+```{r}
+br_df <- trim_df[,c("Country", "Live.births.per.1000.people")]
+br_df$Live.births.per.1000.people <- br_df$Live.births.per.1000.people*1000
+
+plot_country_data(br_df, "Country", "Live.births.per.1000.people", legend_title = "Births per 1000 people")
+```
+
+
+### Death Rate
+```{r}
+dr_df <- trim_df[,c("Country", "Deaths.per.1000.people")]
+dr_df$Deaths.per.1000.people <- dr_df$Deaths.per.1000.people*1000
+
+plot_country_data(dr_df, "Country", "Deaths.per.1000.people", legend_title = "Deaths per 1000 people")
+```
+
+
 
 
 
