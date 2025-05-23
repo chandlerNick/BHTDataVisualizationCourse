@@ -618,14 +618,16 @@ Plot the difference in expected years of education by country (female - male). P
 colnames(trim_df)
 
 yoe_df <- trim_df[,c("Country", "Diff.Expected.YOE")]
-yoe_df
+#yoe_df
 
 plot_country_data(yoe_df, "Country", "Diff.Expected.YOE", legend_title = "Expected Difference in Education")
 ```
+
+
 ```{r}
 dlr_df <- trim_df[,c("Country", "Diff.Literacy.Rate")]
 
-plot_country_data(dle_df, "Country", "Diff.Literacy.Rate", legend_title = "Expected Difference in Literacy Rate")
+plot_country_data(dlr_df, "Country", "Diff.Literacy.Rate", legend_title = "Expected Difference in Literacy Rate")
 ```
 
 
