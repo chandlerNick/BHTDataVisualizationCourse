@@ -1,6 +1,9 @@
 # BHT DataVisualizationCourse
 
-Final report is in the `DataVisualizationFinalReport.Rmd` file
+Final report can be done using a book r package.
+
+
+
 
 Data is in the `data` directory.
 
@@ -16,6 +19,6 @@ The `QuestionX` directories contain R files and artifacts pertaining to the foll
 
 4. How do different heman geographic indicators change depending on biological sex and country?
 
-5. How do different continents compare with eachother? -- seems similar to above -- maybe change
+5. Anything.
 
 
