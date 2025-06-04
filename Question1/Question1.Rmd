@@ -127,7 +127,6 @@ colnames(trim_df)[colnames(trim_df) == "People.and.Society..Population...total"]
 colnames(trim_df)[colnames(trim_df) == "Geography..Map.references"] <- "Continent"
 
 # Note, you must re-run the whole notebook to not have issues with the nan overwriting
-
 ```
 
 Note that we have removed entries that may not be countries so our numbers may not reflect those of other surveys. The preprocessing is however, accessible.
