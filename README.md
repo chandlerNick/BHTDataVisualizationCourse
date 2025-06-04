@@ -1,6 +1,9 @@
 # BHT DataVisualizationCourse
 
-Final report is in the `DataVisualizationFinalReport.Rmd` file
+Final report can be done using a book r package.
+
+
+
 
 Data is in the `data` directory.
 
