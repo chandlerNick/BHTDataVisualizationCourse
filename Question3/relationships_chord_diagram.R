@@ -4,7 +4,7 @@ library(circlize)  # For creating chord diagrams
 library(RColorBrewer)  # For color palettes
 
 # Load the CSV file
-countries_data <- read_csv("clean_data.csv", show_col_types = FALSE)
+countries_data <- read_csv("/home/luisa/Documents/University/BHT/Data Visualization/BHTDataVisualizationCourse/data/clean_data.csv", show_col_types = FALSE)
 
 # Convert the CSV data to a more usable format
 countries <- list()
@@ -23,16 +23,16 @@ country_relationships <- list()
 
 # Define alternative names for certain countries
 country_alternatives <- list(
-  "United Kingdom" = c("Britain", "UK", "England"),
+  "United Kingdom" = c("Britain", "UK", "England", "British"),
   "United States" = c("USA", "US"),
-  "China" = c("PRC"),
-  "Turkey (Turkiye)" = c("Turkiye", "Turkey"),
-  "Congo, Democratic Republic of the" = c("DRC", "DR Congo", "Congo-Kinshasa"),
-  "Congo, Republic of the" = c("Congo-Brazzaville"),
-  "Czechia" = c("Czech Republic"),
-  "Eswatini" = c("Swaziland"),
-  "Burma" = c("Myanmar"),
-  "Holy See (Vatican City)" = c("Vatican"),
+  "China" = c("PRC", "Chinese", "Chin"),
+  "Turkey (Turkiye)" = c("Turkiye", "Turkey", "Turkish"),
+  "Congo, Democratic Republic of the" = c("DRC", "DR Congo", "Congo-Kinshasa", "Congo republics"),
+  "Congo, Republic of the" = c("Congo-Brazzaville", "Congo republics"),
+  "Czechia" = c("Czech Republic", "Czech"),
+  "Eswatini" = c("Swaziland", "Swazee"),
+  "Burma" = c("Myanmar", "Burmese"),
+  "Holy See (Vatican City)" = c("Vatican", "Vatican City"),
   "Micronesia, Federated States of" = c("FSM", "Micronesia"),
   "Gambia, The" = c("The Gambia", "Gambia"),
   "Bahamas, The" = c("The Bahamas", "Bahamas"),
@@ -40,7 +40,22 @@ country_alternatives <- list(
   "Korea, South" = c("South Korea", "ROK"),
   "Timor-Leste" = c("East Timor"),
   "Taiwan" = c("Republic of China", "ROC"),
-  "Vietnam" = c("Viet Nam")
+  "Vietnam" = c("Viet Nam"),
+  "Germany" = c("German"),
+  "France" = c("French"),
+  "Italy" = c("Italian"),
+  "Spain" = c("Spanish"),
+  "Portugal" = c("Portuguese"),
+  "Greece" = c("Greek"),
+  "Netherlands" = c("Dutch"),
+  "Belgium" = c("Belgian"),
+  "Sweden" = c("Swedish"),
+  "Norway" = c("Norwegian"),
+  "Denmark" = c("Danish"),
+  "Finland" = c("Finnish"),
+  "Switzerland" = c("Swiss"),
+  "Poland" = c("Polish"),
+  "Hungary" = c("Hungarian")
 )
 
 # For each country, find which other countries are mentioned in its background
