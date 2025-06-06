@@ -1,0 +1,672 @@
+---
+title: "Global Trade Relations Visualization"
+author: "Data Visualization Course"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: united
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+## Introduction
+
+This R Markdown document creates a visualization of global trade relationships, highlighting the top 50 trade relationships while showing others with lower opacity. The visualization uses curved arrows to represent trade flows, with arrow thickness indicating trade volume.
+
+## Loading Required Libraries
+
+```{r libraries}
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(stringr)
+library(maps)
+library(ggrepel)
+library(scales)
+library(ggarrow)  # For better arrow visualization
+library(plotly)   # For interactive plots
+```
+
+## Data Loading and Preprocessing
+
+First, we load our dataset containing country information and trade relationships.
+
+```{r load_data}
+data <- read_csv("/home/luisa/Documents/University/BHT/Data Visualization/BHTDataVisualizationCourse/data/clean_data.csv", show_col_types = FALSE)
+```
+
+## Country Name Standardization
+
+We define alternative names for countries to ensure consistent naming across our dataset.
+
+```{r country_alternatives}
+country_alternatives <- list(
+  "United Kingdom" = c("Britain", "UK", "England", "British"),
+  "United States" = c("USA", "US"),
+  "China" = c("PRC", "Chinese", "Chin"),
+  "Turkey (Turkiye)" = c("Turkiye", "Turkey", "Turkish"),
+  "Congo, Democratic Republic of the" = c("DRC", "DR Congo", "Congo-Kinshasa", "Congo republics"),
+  "Congo, Republic of the" = c("Congo-Brazzaville", "Congo republics"),
+  "Czechia" = c("Czech Republic", "Czech"),
+  "Eswatini" = c("Swaziland", "Swazee"),
+  "Burma" = c("Myanmar", "Burmese"),
+  "Holy See (Vatican City)" = c("Vatican", "Vatican City"),
+  "Micronesia, Federated States of" = c("FSM", "Micronesia"),
+  "Gambia, The" = c("The Gambia", "Gambia"),
+  "Bahamas, The" = c("The Bahamas", "Bahamas"),
+  "Korea, North" = c("North Korea", "DPRK", "N. Korea"),
+  "Korea, South" = c("South Korea", "ROK", "S. Korea"),
+  "Timor-Leste" = c("East Timor"),
+  "Taiwan" = c("Republic of China", "ROC"),
+  "Vietnam" = c("Viet Nam"),
+  "Germany" = c("German"),
+  "France" = c("French"),
+  "Italy" = c("Italian"),
+  "Spain" = c("Spanish"),
+  "Portugal" = c("Portuguese"),
+  "Greece" = c("Greek"),
+  "Netherlands" = c("Dutch"),
+  "Belgium" = c("Belgian"),
+  "Sweden" = c("Swedish"),
+  "Norway" = c("Norwegian"),
+  "Denmark" = c("Danish"),
+  "Finland" = c("Finnish"),
+  "Switzerland" = c("Swiss"),
+  "Poland" = c("Polish"),
+  "Hungary" = c("Hungarian"),
+  "United Arab Emirates" = c("UAE", "Emirates"),
+  "New Zealand" = c("NZ"),
+  "Trinidad and Tobago" = c("Trinidad & Tobago")
+)
+```
+
+## Helper Functions
+
+### Coordinate Parsing
+Function to parse coordinates from text format (e.g., "33 00 N, 65 00 E")
+
+```{r parse_coordinates_function}
+parse_coordinates <- function(coord_text) {
+  if (is.na(coord_text) || coord_text == "") {
+    return(list(lat = NA, lon = NA))
+  }
+  
+  # Split by comma
+  parts <- str_split(coord_text, ",")[[1]]
+  if (length(parts) != 2) {
+    return(list(lat = NA, lon = NA))
+  }
+  
+  # Parse latitude
+  lat_part <- str_trim(parts[1])
+  lat_match <- str_match(lat_part, "([0-9]+)\\s+([0-9]+)\\s+([NS])")
+  if (is.na(lat_match[1])) {
+    return(list(lat = NA, lon = NA))
+  }
+  lat_deg <- as.numeric(lat_match[2])
+  lat_min <- as.numeric(lat_match[3])
+  lat_dir <- lat_match[4]
+  lat <- lat_deg + lat_min/60
+  if (lat_dir == "S") lat <- -lat
+  
+  # Parse longitude
+  lon_part <- str_trim(parts[2])
+  lon_match <- str_match(lon_part, "([0-9]+)\\s+([0-9]+)\\s+([EW])")
+  if (is.na(lon_match[1])) {
+    return(list(lat = NA, lon = NA))
+  }
+  lon_deg <- as.numeric(lon_match[2])
+  lon_min <- as.numeric(lon_match[3])
+  lon_dir <- lon_match[4]
+  lon <- lon_deg + lon_min/60
+  if (lon_dir == "W") lon <- -lon
+  
+  return(list(lat = lat, lon = lon))
+}
+```
+
+### Import Value Extraction
+Function to extract numeric values from import data text
+
+```{r extract_import_value_function}
+extract_import_value <- function(import_text) {
+  if (is.na(import_text) || import_text == "") {
+    return(0)
+  }
+  
+  match <- str_match(import_text, "\\$([0-9.]+)\\s*(trillion|billion|million)?")
+  if (is.na(match[1])) {
+    return(0)
+  }
+  
+  value <- as.numeric(match[2])
+  if (!is.na(match[3])) {
+    if (match[3] == "million") {
+      value <- value / 1000  # Convert to billions
+    } else if (match[3] == "trillion") {
+      value <- value * 1000  # Convert to billions
+    }
+  }
+  
+  return(value)
+}
+```
+
+### Country Name Standardization
+Function to standardize country names using the alternatives list
+
+```{r standardize_country_name_function}
+standardize_country_name <- function(country_name) {
+  country_name <- str_trim(country_name)
+  
+  if (country_name %in% names(country_alternatives)) {
+    return(country_name)
+  }
+  
+  for (standard_name in names(country_alternatives)) {
+    if (country_name %in% country_alternatives[[standard_name]]) {
+      return(standard_name)
+    }
+  }
+  
+  return(country_name)
+}
+```
+
+### Trade Partner Parsing
+Function to parse trade partners and their percentages from text
+
+```{r parse_trade_partners_function}
+parse_trade_partners <- function(partners_text) {
+  if (is.na(partners_text) || partners_text == "") {
+    return(data.frame())
+  }
+  
+  partners_text <- str_split(partners_text, "note:")[[1]][1]
+  partners_text <- str_trim(partners_text)
+  
+  partners_text <- str_replace(partners_text, "Gambia, The", "Gambia")
+  partners_text <- str_replace(partners_text, "Bahamas, The", "Bahamas")
+  
+  pairs <- str_split(partners_text, ",")[[1]]
+  
+  result <- data.frame()
+  
+  for (pair in pairs) {
+    percent_match <- str_match(pair, "([0-9.]+)%")
+    if (is.na(percent_match[1])) next
+    
+    percentage <- as.numeric(percent_match[2])
+    
+    country_part <- str_replace(pair, "\\s*[0-9.]+%.*", "")
+    country_name <- str_trim(country_part)
+    
+    if (country_name != "" && !is.na(percentage)) {
+      result <- rbind(result, data.frame(
+        partner = standardize_country_name(country_name),
+        percentage = percentage
+      ))
+    }
+  }
+  
+  return(result)
+}
+```
+
+## Initial Data Visualizations
+
+### Distribution of Import Values
+```{r import_distribution, fig.width=10, fig.height=6}
+# Create a dataframe with import values
+import_distribution <- as.data.frame(data) %>%
+  mutate(import_value_billions = sapply(`Economy..Imports`, extract_import_value)) %>%
+  filter(!is.na(import_value_billions)) %>%
+  # Add small offset to handle zeros and ensure log works
+  mutate(import_value_billions = import_value_billions + 0.01) %>%
+  arrange(desc(import_value_billions))
+
+# Get top 5 countries for labeling
+top_5_countries <- import_distribution %>%
+  head(5) %>%
+  mutate(
+    label = paste0(Country, "\n$", round(import_value_billions - 0.01), "B")  # Subtract offset for display
+  )
+
+# Create the violin plot
+ggplot(import_distribution, aes(x = "Global Imports", y = import_value_billions)) +
+  geom_violin(fill = "#1976D2", alpha = 0.6) +
+  geom_jitter(width = 0.1, alpha = 0.4, size = 2, color = "#0D47A1") +
+  geom_point(data = top_5_countries, 
+             aes(y = import_value_billions),
+             color = "red", size = 3) +
+  geom_text_repel(
+    data = top_5_countries,
+    aes(label = label),
+    nudge_x = 0.3,
+    direction = "y",
+    hjust = 0,
+    segment.color = "red",
+    segment.alpha = 0.5,
+    box.padding = 0.5,
+    point.padding = 0.3,
+    force = 10
+  ) +
+  labs(
+    title = "Distribution of Country Import Values (Log₂ Scale)",
+    subtitle = "Top 5 importing countries highlighted in red",
+    x = "",
+    y = "Import Value (Billions USD) - Log₂ Scale"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    axis.text = element_text(size = 10),
+    axis.title = element_text(size = 12),
+    axis.text.x = element_text(angle = 0)
+  ) +
+  scale_y_continuous(
+    trans = scales::log2_trans(),
+    labels = function(x) scales::dollar_format(scale = 1, prefix = "$")(x - 0.01),  # Subtract offset for display
+    breaks = scales::breaks_log(n = 10, base = 2)
+  ) +
+  geom_hline(
+    yintercept = mean(import_distribution$import_value_billions), 
+    color = "#B71C1C", 
+    linetype = "dashed", 
+    size = 1
+  ) +
+  annotate(
+    "text", 
+    x = 0, 
+    y = mean(import_distribution$import_value_billions), 
+    label = paste0("Mean: $", round(mean(import_distribution$import_value_billions) - 0.01), "B"),  # Subtract offset for display
+    color = "#B71C1C",
+    vjust = -0.5,
+    hjust = -3
+  )
+```
+
+### Trade Distribution by Region
+```{r trade_by_region, fig.width=8, fig.height=8}
+# Calculate total trade volume by region
+region_trade <- as.data.frame(data) %>%
+  mutate(
+    import_value_billions = sapply(`Economy..Imports`, extract_import_value),
+    region = `Geography..Map.references`
+  ) %>%
+  group_by(region) %>%
+  summarize(
+    total_trade = sum(import_value_billions, na.rm = TRUE)
+  ) %>%
+  arrange(desc(total_trade)) %>%
+  filter(!is.na(region)) %>%
+  # Calculate percentages for labels
+  mutate(
+    percentage = round(total_trade / sum(total_trade) * 100, 1),
+    hover_text = paste0(
+      region, "\n",
+      "Trade Volume: $", format(round(total_trade), big.mark = ","), "B\n",
+      "Share: ", percentage, "%"
+    )
+  )
+
+# Create color palette matching the main map
+region_colors <- c(
+  "North America" = "#0D47A1",
+  "Europe" = "#1976D2",
+  "Asia" = "#B71C1C",
+  "Southeast Asia" = "#E57373",
+  "Middle East" = "#E65100",
+  "Africa" = "#2E7D32",
+  "Central America" = "#FBC02D",
+  "South America" = "#F9A825",
+  "Oceania" = "#00838F"
+)
+
+# Create the interactive pie chart
+p <- plot_ly(
+  data = region_trade,
+  labels = ~region,
+  values = ~total_trade,
+  type = 'pie',
+  textposition = 'inside',
+  textinfo = 'label',
+  hoverinfo = 'text',
+  text = ~hover_text,
+  marker = list(colors = region_colors[region_trade$region]),
+  hole = 0.4
+) %>%
+  layout(
+    title = list(
+      text = "Distribution of Trade Volume by Region (Interactive)",
+      font = list(size = 16)
+    ),
+    showlegend = FALSE,
+    annotations = list(
+      list(
+        text = paste0("Total Global Trade:\n$", format(round(sum(region_trade$total_trade)), big.mark = ","), "B"),
+        showarrow = FALSE,
+        font = list(size = 12),
+        x = 0.5,
+        y = 0.5
+      )
+    )
+  )
+
+# Display the interactive plot
+p
+```
+
+## Data Processing
+
+Process the coordinates and import values from the raw data.
+
+```{r process_data}
+print("Processing coordinates...")
+coords_list <- lapply(data$`Geography..Geographic.coordinates`, parse_coordinates)
+data$lat <- sapply(coords_list, function(x) x$lat)
+data$lon <- sapply(coords_list, function(x) x$lon)
+
+print("Processing import values...")
+data$import_value_billions <- sapply(data$`Economy..Imports`, extract_import_value)
+```
+
+## Creating Trade Relationships Dataset
+
+Process the trade relationships between countries.
+
+```{r create_trade_relationships}
+print("Processing trade relationships...")
+trade_relationships <- data.frame()
+
+for (i in 1:nrow(data)) {
+  country <- data$Country[i]
+  import_value <- data$import_value_billions[i]
+  country_lat <- data$lat[i]
+  country_lon <- data$lon[i]
+  
+  if (is.na(country_lat) || is.na(country_lon) || import_value == 0) {
+    next
+  }
+  
+  partners <- parse_trade_partners(data$`Economy..Imports...partners`[i])
+  
+  if (nrow(partners) > 0) {
+    for (j in 1:nrow(partners)) {
+      partner_name <- partners$partner[j]
+      percentage <- partners$percentage[j]
+      
+      partner_row <- which(data$Country == partner_name)
+      if (length(partner_row) == 0) {
+        found <- FALSE
+        for (alt_name in names(country_alternatives)) {
+          if (partner_name %in% country_alternatives[[alt_name]]) {
+            partner_row <- which(data$Country == alt_name)
+            if (length(partner_row) > 0) {
+              found <- TRUE
+              break
+            }
+          }
+        }
+        if (!found) {
+          # cat("Country not found:", partner_name, "\n")
+          next
+        }
+      }
+      
+      partner_lat <- data$lat[partner_row[1]]
+      partner_lon <- data$lon[partner_row[1]]
+      
+      if (!is.na(partner_lat) && !is.na(partner_lon)) {
+        line_thickness <- (percentage / 100) * import_value
+        distance <- sqrt((partner_lon - country_lon)^2 + (partner_lat - country_lat)^2)
+        
+        if (distance < 10 && line_thickness > 20) {
+          curvature_category <- "extreme"
+          curvature_value <- 1.2
+        } else if (distance < 10 || line_thickness > 10) {
+          curvature_category <- "very_high"
+          curvature_value <- 0.9
+        } else if (distance < 10) {
+          curvature_category <- "high"
+          curvature_value <- 0.6
+        } else if (distance < 30 || line_thickness > 5) {
+          curvature_category <- "medium_high"
+          curvature_value <- 0.9
+        } else if (distance < 30) {
+          curvature_category <- "medium"
+          curvature_value <- 0.3
+        } else {
+          curvature_category <- "low" 
+          curvature_value <- 0.1
+        }
+        
+        trade_relationships <- rbind(trade_relationships, data.frame(
+          from_country = country,
+          to_country = partner_name,
+          from_lat = country_lat,
+          from_lon = country_lon,
+          to_lat = partner_lat,
+          to_lon = partner_lon,
+          percentage = percentage,
+          import_value = import_value,
+          line_thickness = line_thickness,
+          curvature_category = curvature_category,
+          curvature = curvature_value,
+          arrow_size = 0.2 + (0.1 * log1p(line_thickness)),
+          distance = distance
+        ))
+      }
+    }
+  }
+}
+
+print(paste("Created", nrow(trade_relationships), "trade relationships"))
+```
+
+## Identifying Top Trade Relationships
+
+Sort and mark the top 50 trade relationships.
+
+```{r identify_top_50}
+trade_relationships <- trade_relationships[order(-trade_relationships$line_thickness), ]
+trade_relationships$is_top_50 <- 1:nrow(trade_relationships) <= 50
+
+print(paste("Top 50 relationships range from", 
+            round(min(trade_relationships$line_thickness[trade_relationships$is_top_50]), 2),
+            "to", 
+            round(max(trade_relationships$line_thickness[trade_relationships$is_top_50]), 2),
+            "billion USD"))
+```
+
+## Preparing Arrow Path Data
+
+Helper functions for creating curved arrows.
+
+```{r arrow_helper_functions}
+get_bend_factor <- function(level, distance) {
+  base_levels <- list(
+    "low" = 3.5,         
+    "medium" = 3.5,      
+    "medium_high" = 4, 
+    "high" = 4.5,        
+    "very_high" = 5,   
+    "extreme" = 5.5      
+  )
+  distance_factor <- 1 + log1p(distance/20)
+  return(base_levels[[level]] * distance_factor)
+}
+
+get_bend_direction <- function(start_lon, start_lat, end_lon, end_lat) {
+  if (abs(start_lon - end_lon) < 5) {
+    if (end_lat > start_lat) return(1) else return(-1)
+  }
+  if (end_lon > start_lon) return(1) else return(-1)
+}
+```
+
+Create the arrow path data.
+
+```{r create_arrow_paths}
+print("Creating arrow paths...")
+arrow_data <- data.frame()
+t <- seq(0, 1, length.out = 50)
+
+for (i in 1:nrow(trade_relationships)) {
+  rel <- trade_relationships[i,]
+  
+  from_lon <- rel$to_lon
+  to_lon <- rel$from_lon
+  from_lat <- rel$to_lat
+  to_lat <- rel$from_lat
+  
+  x_range <- to_lon - from_lon
+  y_range <- to_lat - from_lat
+  
+  distance <- sqrt(x_range^2 + y_range^2)
+  
+  bend_dir <- get_bend_direction(from_lon, from_lat, to_lon, to_lat)
+  bend_factor <- get_bend_factor(rel$curvature_category, distance)
+  
+  is_vertical <- abs(x_range) < 5
+  if (is_vertical) {
+    x <- from_lon + x_range * t + bend_dir * bend_factor * sin(pi * t) * 1.2
+    y <- from_lat + y_range * t
+  } else {
+    x <- from_lon + x_range * t
+    y <- from_lat + y_range * t + bend_dir * bend_factor * sin(pi * t)
+  }
+  
+  width_scaled <- sqrt(rel$line_thickness) * 2
+  alpha_value <- ifelse(rel$is_top_50, 0.8, 0.3)
+  
+  arrow_data <- rbind(arrow_data, data.frame(
+    x = x,
+    y = y,
+    group = i,
+    width = width_scaled,
+    is_top_50 = rel$is_top_50,
+    alpha_value = alpha_value
+  ))
+}
+```
+
+## Creating the Visualization
+
+Create and save the final visualization.
+
+```{r create_visualization, fig.width=20, fig.height=12, out.width='100%'}
+# Create a mapping of map references to continents and colors
+continent_colors <- c(
+  # Western-aligned regions in blue spectrum
+  "North America" = "#0D47A1",    # Dark blue
+  "Europe" = "#1976D2",           # Medium blue
+  
+  # Asian regions in red spectrum
+  "Asia" = "#B71C1C",             # Dark red
+  "Southeast Asia" = "#E57373",   # Lighter red
+  
+  # Updated colors as requested
+  "Middle East" = "#E65100",      # Orange
+  "Africa" = "#2E7D32",           # Green
+  "Central America" = "#FBC02D",  # Yellow
+  "South America" = "#F9A825",    # Darker yellow
+  
+  # Other regions
+  "Oceania" = "#00838F",          # Teal
+  "Unknown" = "#757575"           # Gray for unknown/missing values
+)
+
+# Handle missing values and create node sizes directly
+valid_data <- !is.na(data$lat) & !is.na(data$lon)
+node_sizes <- rep(1, nrow(data))  # Default size for all points
+trade_volumes <- data$import_value_billions
+trade_volumes[is.na(trade_volumes)] <- 0
+max_volume <- max(trade_volumes, na.rm = TRUE)
+node_sizes[valid_data] <- 1 + 4 * (trade_volumes[valid_data] / max_volume)
+
+# Handle missing continent data
+data$continent <- data$`Geography..Map.references`
+data$continent[is.na(data$continent)] <- "Unknown"
+
+world_map <- map_data("world")
+
+p <- ggplot() +
+  geom_polygon(data = world_map, 
+               aes(x = long, y = lat, group = group), 
+               fill = "lightgray", 
+               color = "white", 
+               size = 0.2) +
+  
+  geom_arrow(data = arrow_data,
+             aes(x = x, y = y, 
+                 group = group,
+                 linewidth = width * 1.5,
+                 alpha = alpha_value * width/50),  
+             color = "cyan4") +
+  
+  geom_point(data = data[valid_data, ],
+             aes(x = lon, y = lat,
+                 color = continent,
+                 size = node_sizes[valid_data]),
+             alpha = 0.8) +
+  
+  scale_color_manual(name = "Continent/Region",
+                    values = continent_colors,
+                    guide = guide_legend(override.aes = list(size = 8))) +
+  
+  scale_size_continuous(name = "Trade Volume",
+                       range = c(1, 5),
+                       breaks = c(1, 3, 5),
+                       labels = c("No data/0", 
+                                "$500B",
+                                "$5T"),
+                       guide = guide_legend(override.aes = list(size = c(0.6, 3, 5)))) +
+  
+  scale_linewidth_continuous(name = "Trade Flow Volume\n(Billions USD)",
+                         range = c(0.2, 3),
+                         breaks = c(10, 50),
+                         labels = c("$50B", "$500B"),
+                         guide = guide_legend(override.aes = list(alpha = 1))) +
+  
+  scale_alpha_identity() +
+  
+  theme_void() +
+  theme(
+    plot.title = element_text(size = 26, hjust = 0.5, margin = margin(b = 20)),
+    plot.subtitle = element_text(size = 18, hjust = 0.5, margin = margin(b = 20)),
+    legend.position = "right",
+    legend.box = "vertical",
+    legend.margin = margin(10, 10, 10, 10),
+    legend.box.spacing = unit(2, "lines"),
+    legend.text = element_text(size = 16),
+    legend.title = element_text(size = 18, face = "bold"),
+    legend.key.size = unit(2.5, "lines"),
+    legend.key.height = unit(2.5, "lines"),
+    legend.spacing.y = unit(2, "lines"),
+    panel.background = element_rect(fill = "lightblue", color = NA)
+  ) +
+  
+  labs(
+    title = "Global Trade Relationships",
+    subtitle = "Directed import flows: arrows point from trade partners to importing countries\nTop 50 relationships by trade volume highlighted, others shown with low opacity",
+    caption = "Arrow thickness = Import Volume (billions) × Trade Share (%)\nArrows point from trade partner to importing country\nNode size indicates total trade volume (smallest nodes represent countries with no data or zero trade)"
+  ) +
+  
+  coord_fixed(ratio = 1.3, xlim = c(-180, 180), ylim = c(-60, 80))
+
+```
+
+## Display the plot
+
+```{r display_plot, fig.width=20, fig.height=12, out.width='100%'}
+# Display the plot
+ggsave("global_trade_relationships.png", p, width = 20, height = 12, dpi = 300)
+print(p)
+```
+
