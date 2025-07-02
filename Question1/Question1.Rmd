@@ -485,6 +485,37 @@ ggplot(loadings_df, aes(x = PC1, y = PC2)) +
   theme_minimal()
 ```
 
+```{r}
+loadings_df <- as.data.frame(pca_result$rotation[, 1:3])
+loadings_df$varname <- rownames(loadings_df)
+
+segments_df <- loadings_df %>%
+  rowwise() %>%
+  do(data.frame(
+    varname = .$varname,
+    x = c(0, .$PC1),
+    y = c(0, .$PC2),
+    z = c(0, .$PC3)
+  ))
+
+plot_ly(loadings_df, type = 'scatter3d', mode = 'text') %>%
+  add_trace(data = segments_df, 
+            x = ~x, y = ~y, z = ~z, 
+            split = ~varname,
+            line = list(color = 'blue')) %>%
+  add_trace(data = loadings_df,
+            x = ~PC1, y = ~PC2, z = ~PC3,
+            type = 'scatter3d', mode = 'text',
+            text = ~varname,
+            textposition = "top center",
+            showlegend = FALSE) %>%
+  layout(title = '3D PCA Loadings (Vectors from Origin)',
+         scene = list(
+           xaxis = list(title = 'PC1'),
+           yaxis = list(title = 'PC2'),
+           zaxis = list(title = 'PC3')))
+```
+
 To interpret the principal components,we say the following:
 
 1. PC2 appears to contain information regarding country size in both population and land area, large values indicating larger countries. The only "out of place" variable contained in this is the "Deaths.per.1000.people" variable.
@@ -617,8 +648,14 @@ pairs(numeric_df_normalized,
       pch = 21, 
       bg = "lightblue")         # optional: simplify upper triangle
 
-
 par(old_par)
+```
+
+```{r}
+library(corrplot)
+corrplot(cor(na.omit(numeric_df_normalized), method="spearman"))
+corrplot(cor(na.omit(numeric_df_normalized)))
+cor(na.omit(numeric_df_normalized))
 ```
 
 
@@ -857,7 +894,7 @@ plot_country_data(al_df, "Country", "Arable.land.percent", legend_title = "Propo
 ### IMR
 ```{r}
 imr_df <- trim_df[,c("Country", "Infant.deaths.per.1000.live.births")]
-imr_df$Infant.deaths.per.1000.live.births <- imr_df$Infant.deaths.per.1000.live.births*1000
+imr_df$Infant.deaths.per.1000.live.births
 
 plot_country_data(imr_df, "Country", "Infant.deaths.per.1000.live.births", legend_title = "IMR (deaths per 1000 births)")
 ```

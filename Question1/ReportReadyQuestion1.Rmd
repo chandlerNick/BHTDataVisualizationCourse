@@ -1,0 +1,397 @@
+---
+title: "Question 1"
+author: "Luisa Kalkert, Luke Richard, Nicholas Chandler"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+#knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+library(dplyr)
+library(ggplot2)
+library(ggrepel)
+library(tidyr)
+library(ks)
+library(rgl)
+library(scales)
+library(MASS)
+library(plotly)
+library(fmsb)
+library(patchwork)
+library(tidyverse)
+library(aplpack)
+library(corrplot)
+
+```
+
+# Introduction
+
+In this section, we ask the question: "How do GDP per capita, total population, and other human geographic indicators relate to eachother?"
+
+The Human-Geographic information we have is:
+
+[Info here]
+
+The Quality of Life indicators are:
+
+[Info here]
+
+We begin the analysis by reading in the data (and filtering the relevant columns) as is done in the following R code.
+
+```{r}
+# Function to display the columns and nan counts
+col_names_and_nas <- function(df) {
+  for (i in seq_along(df)) {
+    cat(colnames(df)[i], ":", sum(is.na(df[[i]])), "\n")
+  }
+}
+
+# read data
+full_df <- read.csv("../data/clean_data.csv", header = TRUE)
+
+# Trim data
+cols_to_keep <- c("Geography..Map.references", "Geography..Geographic.coordinates", "Geography..Area...land", "Geography..Area...total", "Geography..Climate", "Geography..Land.use...agricultural.land", "Economy..Real.GDP.per.capita", "People.and.Society..Population...total", "People.and.Society..Population.growth.rate", "People.and.Society..Birth.rate", "People.and.Society..Death.rate", "People.and.Society..Maternal.mortality.ratio", "People.and.Society..Infant.mortality.rate...total", "People.and.Society..Life.expectancy.at.birth...total.population" ,"People.and.Society..Physician.density" ,"Communications..Telephones...mobile.cellular...subscriptions.per.100.inhabitants", "Communications..Internet.users...percent.of.population")
+
+trim_df <- full_df[,cols_to_keep]
+trim_df$Country <- full_df[,1]
+rownames(trim_df) <- full_df[,1]
+```
+
+We now concern ourselves with the cleaning of the selected columns as many have strings mixed in with numeric values.
+
+```{r}
+library(stringr)
+
+# Geography..Area...land
+trim_df$Geography..Area...land <- as.numeric(gsub(",", "", str_extract(trim_df$Geography..Area...land, "[0-9,]+")))
+colnames(trim_df)[colnames(trim_df) == "Geography..Area...land"] <- "Land.sqkm"
+
+# Geography..Area...total
+trim_df$Geography..Area...total <- as.numeric(gsub(",", "", str_extract(trim_df$Geography..Area...total, "[0-9,]+")))
+colnames(trim_df)[colnames(trim_df) == "Geography..Area...total"] <- "Total.sqkm"
+
+# Geography..Climate
+trim_df$Geography..Climate <- str_extract(trim_df$Geography..Climate, "^[^;]+")
+colnames(trim_df)[colnames(trim_df) == "Geography..Climate"] <- "Climate"
+
+# Geography..Land.use...agricultural.land
+trim_df$Geography..Land.use...agricultural.land <- as.numeric(sub("%", "", str_extract(trim_df$Geography..Land.use...agricultural.land, "[0-9.]+%")))/100
+colnames(trim_df)[colnames(trim_df) == "Geography..Land.use...agricultural.land"] <- "Arable.land.percent"
+
+# Economy..Real.GDP.per.capita
+trim_df$Economy..Real.GDP.per.capita <- as.numeric(gsub("[$,]", "", str_extract(trim_df$Economy..Real.GDP.per.capita, "\\$[0-9,]+")))
+colnames(trim_df)[colnames(trim_df) == "Economy..Real.GDP.per.capita"] <- "Real.GDP.per.capita.USD"
+
+# People.and.Society..Population.growth.rate
+trim_df$People.and.Society..Population.growth.rate <- as.numeric(sub("%", "", str_extract(trim_df$People.and.Society..Population.growth.rate, "[0-9.]+%"))) / 100
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Population.growth.rate"] <- "Population.growth.rate.percent"
+
+# People.and.Society..Birth.rate - births 
+trim_df$People.and.Society..Birth.rate <- as.numeric(str_extract(trim_df$People.and.Society..Birth.rate, "^[0-9]+")) / 1000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Birth.rate"] <- "Live.births.per.1000.people"
+
+# People.and.Society..Death.rate - deaths per person 
+trim_df$People.and.Society..Death.rate <- as.numeric(str_extract(trim_df$People.and.Society..Death.rate, "^[0-9]+")) / 1000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Death.rate"] <- "Deaths.per.1000.people"
+
+# People.and.Society..Maternal.mortality.ratio - deaths per live birth
+trim_df$People.and.Society..Maternal.mortality.ratio <- as.numeric(gsub(",", "", str_extract(trim_df$People.and.Society..Maternal.mortality.ratio, "^[0-9]+"))) / 100000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Maternal.mortality.ratio"] <- "Maternal.deaths.per.100000.live.births"
+
+# People.and.Society..Infant.mortality.rate...total - deaths per live birth
+trim_df$People.and.Society..Infant.mortality.rate...total <- as.numeric(str_extract(trim_df$People.and.Society..Infant.mortality.rate...total, "^[0-9.]+")) / 1000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Infant.mortality.rate...total"] <- "Infant.deaths.per.1000.live.births"
+
+# People.and.society..Life.expectancy.at.birth...total.population
+trim_df$People.and.Society..Life.expectancy.at.birth...total.population <- as.numeric(str_extract(trim_df$People.and.Society..Life.expectancy.at.birth...total.population, "^[0-9.]+"))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Life.expectancy.at.birth...total.population"] <- "Life.expectancy.at.birth"
+
+# People.and.Society..Physician.density
+trim_df$People.and.Society..Physician.density <- as.numeric(str_extract(trim_df$People.and.Society..Physician.density, "^[0-9.]+")) / 1000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Physician.density"] <- "Physicians.per.1000.people"
+
+# Communications..Telephones...mobile.cellular...subscriptions.per.100.inhabitants
+trim_df$Communications..Telephones...mobile.cellular...subscriptions.per.100.inhabitants <- as.numeric(str_extract(trim_df$Communications..Telephones...mobile.cellular...subscriptions.per.100.inhabitants, "^[0-9]+")) / 100
+colnames(trim_df)[colnames(trim_df) == "Communications..Telephones...mobile.cellular...subscriptions.per.100.inhabitants"] <- "Avg.cellphone.subscriptions.per.person"
+
+# Communications..Internet.users...percent.of.population
+trim_df$Communications..Internet.users...percent.of.population <- as.numeric(str_extract(trim_df$Communications..Internet.users...percent.of.population, "^[0-9.]+")) / 100
+colnames(trim_df)[colnames(trim_df) == "Communications..Internet.users...percent.of.population"] <- "Internet.users.percent.of.population"
+
+# People.and.Society..Population...total
+trim_df$People.and.Society..Population...total <- as.numeric(gsub(",", "", str_extract(trim_df$People.and.Society..Population...total, "^[0-9,]+")))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Population...total"] <- "Total.population"
+
+# Geography..Map.references
+colnames(trim_df)[colnames(trim_df) == "Geography..Map.references"] <- "Continent"
+trim_df$Continent[trim_df$Continent == "Central America and the Caribbean"] <- "Central America"
+
+# Note, you must re-run the whole notebook to not have issues with the nan overwriting
+```
+
+Note that we have removed entries that may not be countries so our numbers may not reflect those of other surveys. The preprocessing is however, accessible.
+
+
+
+The continents we examine are:
+```{r}
+continents <- unlist(unique(trim_df$Continent))
+continents
+```
+
+
+
+```{r}
+# Function to create interactive boxplot with underlying points
+plot_boxplot_with_points <- function(data, variable, group_var = "Continent", 
+                                         title = NULL, y_label = NULL, x_label = "Region", 
+                                         point_id_var = "Country") {
+  data <- na.omit(data)
+  
+  # Check if required columns exist
+  if (!(variable %in% colnames(data))) stop(paste("Column", variable, "not found in the dataframe"))
+  if (!(group_var %in% colnames(data))) stop(paste("Group variable", group_var, "not found in the dataframe"))
+  if (!(point_id_var %in% colnames(data))) stop(paste("Hover variable", point_id_var, "not found in the dataframe"))
+
+  # Define default labels
+  if (is.null(title)) title <- paste("Distribution of", variable, "by", group_var)
+  if (is.null(y_label)) y_label <- variable
+
+  ggplot(data, aes(x = .data[[group_var]], y = .data[[variable]], fill = .data[[group_var]])) +
+    geom_boxplot(width = 0.75, alpha = 0.25, outlier.color = NA) +
+    geom_point(
+      aes(color = .data[[group_var]]),
+      size = 1.3,
+      alpha = 1,
+      position = position_jitter(seed = 1, width = .09)
+    ) +
+    labs(title = title, x = x_label, y = y_label) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none") +
+    coord_flip()
+}
+```
+
+
+
+```{r, echo=FALSE}
+# Boxplots
+Box_GDP_Cap <- plot_boxplot_with_points(trim_df, "Real.GDP.per.capita.USD", title= "Real GDP per Capita by Region", y_label="Real GDP per Capita (2021 USD)", x_label="Region")
+Box_IMR <- plot_boxplot_with_points(trim_df, "Infant.deaths.per.1000.live.births", title= "Infant Mortality Rate", y_label="Infant Deaths per 1000 Live Births", x_label="Region")
+Box_Total_Pop <- plot_boxplot_with_points(trim_df, "Total.population", title= "Total Population", y_label="No. of People", x_label="Region")
+```
+
+# Exploratory Classical Graphics
+
+In this section, we examine a set of statistical graphics on a representative subset of the variables considered in the rest of this question. Specifically, we look at Land vs. Arable Land by region, GDP per capita, Infant Mortality Rate, and Total Population.
+
+```{r}
+# Land per continent
+continent_land <- trim_df %>%
+  group_by(Continent) %>%
+  summarise(TotalLand = sum(Land.sqkm, na.rm = TRUE))
+
+  # Arable land per continent
+continent_arable_land <- trim_df %>%
+  mutate(ArableLand = (Arable.land.percent) * Land.sqkm) %>%
+  group_by(Continent) %>%
+  summarise(TotalArableLand = sum(ArableLand, na.rm = TRUE))
+
+# Combine into long format
+combined <- left_join(continent_land, continent_arable_land, by="Continent") %>%
+  pivot_longer(cols = c(TotalLand, TotalArableLand),
+               names_to = "Type",
+               values_to = "Area") %>%
+  mutate(Type = recode(Type,
+                       TotalLand = "Total Land",
+                       TotalArableLand = "Arable Land"))
+
+# Sort
+continent_order <- combined %>%
+  filter(Type == "Total Land") %>%
+  arrange(desc(Area)) %>%
+  pull(Continent)
+
+
+combined$Continent <- factor(combined$Continent, levels=continent_order)
+
+# Plot - skqm of land and arable land
+ggplot(combined, aes(x = Continent, y = Area, fill = Type)) +
+  geom_bar(stat = "identity", position = position_dodge(width=0.8), width = 0.7, color = "black") +
+  scale_y_continuous(labels= comma) + 
+  labs(
+    title = "Land vs. Arable Land Area by Region",
+    x = "Region", 
+    y = "Area (sq. km)",
+    fill = "Land Type"
+  ) +
+  theme_minimal(base_size=14) +
+  theme(axis.text.x = element_text(angle = 45, hjust=1)) +
+  scale_fill_brewer(palette="Set1")
+```
+
+One observes an ordering of the total land per region and arable land per region. We see that Asia has the most land and arable land. We also see that South America has a higher proportion of arable land compared to North America.
+
+
+```{r}
+Box_GDP_Cap
+```
+We see that Africa has the lowest median real GDP per capita and North America has the highest. The Middle East hasa a very large spread compared to the other countries.
+
+```{r}
+Box_IMR
+```
+Africa has the highest median infant mortality rate while Europe has the lowest.
+
+```{r}
+Box_Total_Pop
+```
+
+Asia has the two most populous countries in the world, India and China.
+
+# Correlation
+
+In this section, we examine the correlation between selected continuous variables. Specifically, one can see that land, agricultural land, death rate, and total population have little correlation with other variables whereas the remaining variables seem to have complex correlation patterns among themselves.
+
+```{r, include=FALSE}
+numeric_df <- trim_df[, c("Total.sqkm", "Arable.land.percent", "Real.GDP.per.capita.USD", "Infant.deaths.per.1000.live.births", "Life.expectancy.at.birth", "Deaths.per.1000.people", "Live.births.per.1000.people", "Population.growth.rate.percent", "Total.population")]
+numeric_df_normalized <- scale(numeric_df)
+colnames(numeric_df_normalized) <- c("Land", "Ag. Land", "GDP/capita", "Inf. Mort.", "Life Expect.", "Death Rate", "Birth Rate", "Pop. Growth", "Tot. Pop.")
+
+corrplot(cor(na.omit(numeric_df_normalized)))
+
+```
+
+
+# Principal Components Analysis
+
+In this section we examine principal components analysis on the following variables:
+
+```{r}
+numeric_df <- trim_df[, c("Total.sqkm", "Arable.land.percent", "Real.GDP.per.capita.USD", "Infant.deaths.per.1000.live.births", "Life.expectancy.at.birth", "Deaths.per.1000.people", "Live.births.per.1000.people", "Population.growth.rate.percent", "Total.population")]
+
+colnames(numeric_df)
+```
+
+
+```{r, include=FALSE}
+pca_result <- prcomp(na.omit(numeric_df), center=TRUE, scale. = TRUE)
+
+summary(pca_result)
+
+raw_variance <- pca_result$sdev^2
+
+pve <- raw_variance / sum(raw_variance)
+
+cumulative_pve <- cumsum(pve)
+
+pca_performance_data <- data.frame(
+  PC = factor(1:length(pve), levels = 1:length(pve)),
+  RawVariance = raw_variance,
+  PVE = pve,
+  CumulativePVE = cumulative_pve
+)
+```
+
+
+```{r, echo=FALSE}
+raw_var_plot <- ggplot(pca_performance_data, aes(x=PC, y=RawVariance)) +
+  geom_line(aes(group=1), color="red", size=1) +
+  geom_point(color="red", size=3)+
+  geom_hline(yintercept=1, linetype="dotted", color="black")
+  labs(
+    title = "Raw Variance Plot", 
+    x = "Principal Components",
+    y = "Raw Variance"
+  ) +
+  theme_minimal() + 
+  theme(axis.text.x = element_text(angle = 45, hjust=1), legend.position="none")
+  
+cpve_plot <- ggplot(pca_performance_data, aes(x = PC, y = CumulativePVE, group=1)) +
+  geom_line(color="blue", size=1) +
+  geom_point(color="blue", size=3) +
+  geom_hline(yintercept=0.9, linetype="dotted", color="black")
+  labs(
+    title = "Cumulative Proportion of Variance Explained (PVE)",
+    x = "Principal Components",
+    y = "Cumulative PVE" 
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position="none")
+  
+```
+
+
+```{r, fig.height=8, fig.width=10}
+raw_var_plot + cpve_plot
+```
+
+
+There are 3 principal components that "aggregate information" due to the variance being larger than 1 while the PCA was run on scaled data. Additionally, to capture ~90% of the variance, we nned 5 PCs.
+
+Here we plot the loading vectors of the PCA on the axes of the first and second principal components.
+```{r, fig.width=10, fig.height=8}
+# Create dataframe for loadings
+loadings_df <- as.data.frame(pca_result$rotation[, 1:2])
+loadings_df$varname <- rownames(loadings_df)
+
+ggplot(loadings_df, aes(x = PC1, y = PC2)) +
+  geom_segment(aes(x = 0, y = 0, xend = PC1, yend = PC2), 
+               arrow = arrow(length = unit(0.2,"cm")), color = "blue") +
+  geom_text_repel(aes(label = varname), size = 3, max.overlaps = 100) +
+  labs(title = "PCA Biplot: Loadings Only") +
+  theme_minimal()
+```
+
+One can see that for small values of PC1 we see large values of Infant Mortality Rate, Birth Rate, and Population Growth Rate. For large values of PC1 we see large values of Real GDP per capita USD and Life Expectancy at Birth. One could interpret PC1 as the developedness of countries with larger values corresponding to more developed countries.
+
+For large values of PC2 we see that the countries typically have large values of Total Poplation and Total SqKm ans also (to a lesser degree) Arable Land and Death Rate. PC2 could be interpreted as the size of a country in terms of population and area.
+
+```{r, fig.width=10, fig.height=8}
+meta_df <- trim_df[, c("Country", "Continent")]
+# Get PCA scores (observations)
+scores_df <- as.data.frame(pca_result$x[, 1:2])
+scores_df$Country <- rownames(scores_df)
+
+# Add distance from origin in PC1-PC2 space
+scores_df <- scores_df %>%
+  left_join(meta_df, by = "Country") %>%
+  mutate(Distance = sqrt(PC1^2 + PC2^2))
+
+# Keep top 10 extreme countries - euclidean norm of first two principal components
+top_extremes <- scores_df %>%
+  arrange(desc(Distance)) %>%
+  slice_head(n = 50)
+
+  
+
+# Plot
+ggplot(top_extremes, aes(x = PC1, y = PC2, label = Country, color = Continent)) +
+  geom_point(size = 2) +
+  geom_text_repel(
+    size = 2,
+    max.overlaps = Inf,        # allow all to be plotted
+    force = 2,                 # increase repulsion strength
+    force_pull = 0.1,          # balance between point and label
+    box.padding = 0.5,         # more space around text
+    point.padding = 0.3,       # space between text and point
+    segment.color = "grey50",  # optional connector color
+    segment.size = 0.4
+  ) +
+  geom_hline(yintercept=0, linetype="dotted", color="black") +
+  geom_vline(xintercept=0, linetype="dotted", color="black") + 
+  labs(title = "Top 50 Most Extreme Countries in PC1-PC2 Space",
+       x = "PC1", y = "PC2") +
+  theme_minimal() +
+  scale_color_brewer(palette = "Paired")
+
+```
+
+We see groupings along the PC1 axis of more developed countries on the side with larger PC1 values and less developed countries with smaller PC1 values.
+There are several outliers with large values for PC2 that correspond with larger countries in terms of both population and land mass.
+
+
+
+
