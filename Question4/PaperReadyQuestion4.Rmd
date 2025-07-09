@@ -2,24 +2,357 @@
 title: "PaperReadyQuestion4"
 author: "Nick Chandler"
 date: "2025-07-09"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
+library(dplyr)
+library(ggplot2)
+library(ggrepel)
+library(tidyr)
+library(ks)
+library(rgl)
+library(scales)
+library(MASS)
+library(plotly)
+library(fmsb)
+library(patchwork)
+library(tidyverse)
+library(aplpack)
+library(leaflet)
+library(rnaturalearth)
+library(countrycode)
+library(cowplot)
 ```
+
+
+```{r}
+col_names_and_nas <- function(df) {
+  for (i in seq_along(df)) {
+    na_count <- sum(is.na(df[[i]]))
+    empty_count <- sum(df[[i]] == "", na.rm = TRUE)
+    cat(colnames(df)[i], ":", na_count + empty_count, "\n")
+  }
+}
+
+# Read in data
+full_df <- read.csv("../data/clean_data.csv", header = TRUE)
+
+# Trim data
+sub_cols <- grep("male|female", colnames(full_df),ignore.case=TRUE)
+cols_to_keep <- colnames(full_df[, sub_cols])
+cols_to_keep <- c(cols_to_keep, c("Geography..Map.references", "Geography..Geographic.coordinates", "Economy..Real.GDP.per.capita", "People.and.Society..Population...total", "People.and.Society..Birth.rate", "People.and.Society..Maternal.mortality.ratio", "People.and.Society..Infant.mortality.rate...total", "People.and.Society..Life.expectancy.at.birth...total.population", "People.and.Society..Population.growth.rate"))
+
+trim_df <- full_df[-78,cols_to_keep]  # Note, we omit vatican city here due to lack of gender specific data
+trim_df$Country <- full_df[-78,1]
+rownames(trim_df) <- full_df[-78,1]
+
+# Status report
+#col_names_and_nas(trim_df)
+```
+
+```{r}
+# Economy..Real.GDP.per.capita
+trim_df$Economy..Real.GDP.per.capita <- as.numeric(gsub("[$,]", "", str_extract(trim_df$Economy..Real.GDP.per.capita, "\\$[0-9,]+")))
+colnames(trim_df)[colnames(trim_df) == "Economy..Real.GDP.per.capita"] <- "Real.GDP.per.capita.USD"
+
+# People.and.Society..Population.growth.rate
+trim_df$People.and.Society..Population.growth.rate <- as.numeric(sub("%", "", str_extract(trim_df$People.and.Society..Population.growth.rate, "[0-9.]+%"))) / 100
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Population.growth.rate"] <- "Population.growth.rate.percent"
+
+# People.and.Society..Birth.rate - births 
+trim_df$People.and.Society..Birth.rate <- as.numeric(str_extract(trim_df$People.and.Society..Birth.rate, "^[0-9]+")) / 1000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Birth.rate"] <- "Live.births.per.1000.people"
+
+# People.and.Society..Population...total
+trim_df$People.and.Society..Population...total <- as.numeric(gsub(",", "", str_extract(trim_df$People.and.Society..Population...total, "^[0-9,]+")))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Population...total"] <- "Total.population"
+
+# People.and.Society..Maternal.mortality.ratio - deaths per live birth
+trim_df$People.and.Society..Maternal.mortality.ratio <- as.numeric(gsub(",", "", str_extract(trim_df$People.and.Society..Maternal.mortality.ratio, "^[0-9]+"))) / 100000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Maternal.mortality.ratio"] <- "Maternal.deaths.per.100000.live.births"
+
+# People.and.Society..Infant.mortality.rate...total - deaths per live birth
+trim_df$People.and.Society..Infant.mortality.rate...total <- as.numeric(str_extract(trim_df$People.and.Society..Infant.mortality.rate...total, "^[0-9.]+")) / 1000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Infant.mortality.rate...total"] <- "Infant.deaths.per.1000.live.births"
+
+# People.and.society..Life.expectancy.at.birth...total.population
+trim_df$People.and.Society..Life.expectancy.at.birth...total.population <- as.numeric(str_extract(trim_df$People.and.Society..Life.expectancy.at.birth...total.population, "^[0-9.]+"))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Life.expectancy.at.birth...total.population"] <- "Life.expectancy.at.birth"
+
+# Geography..Map.references
+colnames(trim_df)[colnames(trim_df) == "Geography..Map.references"] <- "Continent"
+
+# People.and.Society..Population...male
+trim_df$People.and.Society..Population...male <- as.numeric(gsub(",", "", str_extract(trim_df$People.and.Society..Population...male, "^\\s*[0-9,]+")))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Population...male"] <- "Male.population"
+
+# People.and.Society..Population...female
+trim_df$People.and.Society..Population...female <- as.numeric(gsub(",", "", str_extract(trim_df$People.and.Society..Population...female, "^\\s*[0-9,]+")))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Population...female"] <- "Female.population"
+
+# Economy..Youth.unemployment.rate..ages.15.24....female
+trim_df$Economy..Youth.unemployment.rate..ages.15.24....female <- as.numeric(str_extract(trim_df$Economy..Youth.unemployment.rate..ages.15.24....female, "^\\s*[0-9.]+")) / 100
+colnames(trim_df)[colnames(trim_df) == "Economy..Youth.unemployment.rate..ages.15.24....female"] <- "Female.unemployment.rate.15.24"
+
+# Economy..Youth.unemployment.rate..ages.15.24....male
+trim_df$Economy..Youth.unemployment.rate..ages.15.24....male <- as.numeric(str_extract(trim_df$Economy..Youth.unemployment.rate..ages.15.24....male, "^\\s*[0-9.]+")) / 100
+colnames(trim_df)[colnames(trim_df) == "Economy..Youth.unemployment.rate..ages.15.24....male"] <- "Male.unemployment.rate.15.24"
+
+
+# People.and.Society..School.life.expectancy..primary.to.tertiary.education....female
+trim_df$People.and.Society..School.life.expectancy..primary.to.tertiary.education....female <- as.numeric(str_extract(trim_df$People.and.Society..School.life.expectancy..primary.to.tertiary.education....female, "^\\s*[0-9]+"))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..School.life.expectancy..primary.to.tertiary.education....female"] <- "Female.expected.years.of.education"
+
+# People.and.Society..School.life.expectancy..primary.to.tertiary.education....male
+trim_df$People.and.Society..School.life.expectancy..primary.to.tertiary.education....male <- as.numeric(str_extract(trim_df$People.and.Society..School.life.expectancy..primary.to.tertiary.education....male, "^\\s*[0-9]+"))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..School.life.expectancy..primary.to.tertiary.education....male"] <- "Male.expected.years.of.education"
+
+# People.and.Society..Literacy...female
+trim_df$People.and.Society..Literacy...female <- as.numeric(str_extract(trim_df$People.and.Society..Literacy...female, "^\\s*[0-9.]+")) / 100
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Literacy...female"] <- "Female.literacy.rate"
+
+# People.and.Society..Literacy...male
+trim_df$People.and.Society..Literacy...male <- as.numeric(str_extract(trim_df$People.and.Society..Literacy...male, "^\\s*[0-9.]+")) / 100
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Literacy...male"] <- "Male.literacy.rate"
+
+# People.and.Society..Tobacco.use...female
+trim_df$People.and.Society..Tobacco.use...female <- as.numeric(str_extract(trim_df$People.and.Society..Tobacco.use...female, "^\\s*[0-9.]+")) / 100
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Tobacco.use...female"] <- "Female.proportion.of.tobacco.users"
+
+# People.and.Society..Tobacco.use...male
+trim_df$People.and.Society..Tobacco.use...male <- as.numeric(str_extract(trim_df$People.and.Society..Tobacco.use...male, "^\\s*[0-9.]+")) / 100
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Tobacco.use...male"] <- "Male.proportion.of.tobacco.users"
+
+# People.and.Society..Life.expectancy.at.birth...female
+trim_df$People.and.Society..Life.expectancy.at.birth...female <- as.numeric(str_extract(trim_df$People.and.Society..Life.expectancy.at.birth...female, "^\\s*[0-9.]+"))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Life.expectancy.at.birth...female"] <- "Female.life.expectancy.at.birth"
+
+# People.and.Society..Life.expectancy.at.birth...male
+trim_df$People.and.Society..Life.expectancy.at.birth...male <- as.numeric(str_extract(trim_df$People.and.Society..Life.expectancy.at.birth...male, "^\\s*[0-9.]+"))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Life.expectancy.at.birth...male"] <- "Male.life.expectancy.at.birth"
+
+# People.and.Society..Infant.mortality.rate...female
+trim_df$People.and.Society..Infant.mortality.rate...female <- as.numeric( str_extract(trim_df$People.and.Society..Infant.mortality.rate...female, "^\\s*[0-9.]+")) / 1000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Infant.mortality.rate...female"] <- "Female.IMR.deaths.per.birth"
+
+# People.and.Society..Infant.mortality.rate...male
+trim_df$People.and.Society..Infant.mortality.rate...male <- as.numeric( str_extract(trim_df$People.and.Society..Infant.mortality.rate...male, "^\\s*[0-9.]+")) / 1000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Infant.mortality.rate...male"] <- "Male.IMR.deaths.per.birth"
+
+# People.and.Society..Median.age...female
+trim_df$People.and.Society..Median.age...female <- as.numeric( str_extract(trim_df$People.and.Society..Median.age...female, "^\\s*[0-9.]+"))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Median.age...female"] <- "Median.age.female"
+
+# People.and.Society..Median.age...male
+trim_df$People.and.Society..Median.age...male <- as.numeric( str_extract(trim_df$People.and.Society..Median.age...male, "^\\s*[0-9.]+"))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Median.age...male"] <- "Median.age.male"
+```
+
 
 # Introduction
 
-In this section we seek to answer the question: "How do selected demographic statistics differ between males and females?". The statistics we examine are: 
+In this section we seek to answer the question: "How do selected demographic variables differ between males and females?". The variables we examine are: Population, Life Expectancy at Birth, Infant Mortality Rate, and Median Age. The techniques we use are Pairs Plots, Kernel Density Estimation + Rug Plots, PCA, and Choropleths.
 
 # Correlation
+
+```{r, fig.height=8, fig.width=10}
+gendered_df <- trim_df[,c("Male.population", "Female.population", "Median.age.male", "Median.age.female", "Male.IMR.deaths.per.birth", "Female.IMR.deaths.per.birth", "Male.life.expectancy.at.birth", "Female.life.expectancy.at.birth")]
+
+par(mar = c(8,8,3,3))  # Modify margins to make the plot larger (top, left, bottom, right)
+colnames(gendered_df)
+colnames(gendered_df) <- c("Male.population", "Female.population", "Male.median.age", "Female.median.age", "Male IMR", "Female IMR", "M.Life.Expectancy", "F.Life.Expectancy")
+colnames(gendered_df)
+
+pairs(gendered_df,
+      labels = colnames(gendered_df),
+      cex.labels = 0.8,            # label size
+      font.labels = 2,             # bold
+      gap = 1,                   # spacing between plots and labels
+      upper.panel = NULL,
+      pch = 21, 
+      bg = "lightblue")         # optional: simplify upper triangle
+```
+In these plots, one can see a strong, positive linear relationship between the male and female values for each of the variables: population, median age, infant mortality rate, and life expectancy per country. Because of this, we focus on these variables for the remainder of the analysis.
 
 
 # Univariate Statistical Graphics
 
+```{r}
+plot_two_kde_plots_on_same_axes <- function(x1, x2,
+                                            label1,
+                                            label2,
+                                            title, 
+                                            xlab,
+                                            col1 = "pink",
+                                            col2 = "lightblue", 
+                                            lwd=2, legend.pos="topright", rug.alpha=0.4, ...) {
+  x1 <- na.omit(x1)
+  x2 <- na.omit(x2)
+  
+  xlim = range(c(x1,x2))
+  
+  plot(density(x1),
+       xlab=xlab, main=title, xlim=xlim,
+       col=col1, lwd=lwd, ...)
+  lines(density(x2), col=col2, lwd=lwd)
+  legend(legend.pos, legend=c(label1, label2), col=c(col1, col2), lwd=lwd)
+  
+  # Add a color coded rug
+  rug(x1, col=adjustcolor(col1, alpha.f=rug.alpha), side=1)
+  rug(x2, col=adjustcolor(col2, alpha.f=rug.alpha), side=1)
+}
+```
 
-# PCA
+### Median Age Across Genders
+```{r, fig.width=10, fig.height=10}
+par(mfrow=c(2,2))
+
+# Median Age
+plot_two_kde_plots_on_same_axes(trim_df$Median.age.female, trim_df$Median.age.male, "Female", "Male", "Median Age of Females and Males", "Median Age (years since birth)")
+
+# Infant Mortality Rate
+plot_two_kde_plots_on_same_axes(trim_df$Female.IMR.deaths.per.birth, trim_df$Male.IMR.deaths.per.birth, "Female", "Male", "Infant Mortality Ratio (IMR) of Males and Females", "IMR (Deaths per Birth)")
+
+# Life Expectancy
+plot_two_kde_plots_on_same_axes(trim_df$Female.life.expectancy.at.birth, trim_df$Male.life.expectancy.at.birth, "Female", "Male", "Life Expectancy of Males and Females", "Expected Years of Life After Birth", legend.pos="topleft")
+
+# Population
+plot_two_kde_plots_on_same_axes(trim_df$Female.population, trim_df$Male.population, "Female", "Male", "Population of Males and Females", "Population")
+```
+
+
+```{r}
+
+plot_gender_by_continent <- function(data, male_var, female_var, title, y_label) {
+  library(dplyr)
+  library(tidyr)
+  library(ggplot2)
+  
+  agg_df <- data %>%
+    group_by(Continent) %>%
+    summarise(
+      Male = mean(.data[[male_var]], na.rm = TRUE),
+      Female = mean(.data[[female_var]], na.rm = TRUE)
+    ) %>%
+    mutate(Total = Male + Female) %>%
+    arrange(desc(Total)) %>%
+    select(-Total) %>%
+    pivot_longer(cols = c(Male, Female), names_to = "Gender", values_to = "Value")
+  
+  ggplot(agg_df, aes(x = reorder(Continent, -Value, sum), y = Value, fill = Gender)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    labs(
+      title = title,
+      x = "Continent",
+      y = y_label
+    ) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    scale_fill_manual(values = c("Male" = "lightblue", "Female" = "pink"))
+}
+```
+
+```{r, fig.width=10, fig.height=10}
+age <- plot_gender_by_continent(trim_df, "Median.age.male", "Median.age.female", title="Median Age per Continent", y_label="Average Age (years)")
+
+imr <- plot_gender_by_continent(trim_df, "Male.IMR.deaths.per.birth", "Female.IMR.deaths.per.birth", title="Infant Mortality Rate per Continent", y_label="Average IMR (deaths per birth)")
+
+life.expectancy <- plot_gender_by_continent(trim_df, "Male.life.expectancy.at.birth", "Female.life.expectancy.at.birth", title="Life Expectancy per Continent", y_label="Average Life Expectancy (years)")
+
+population <- plot_gender_by_continent(trim_df, "Male.population", "Female.population", title="Population per Continent", y_label="Average Population")
+
+plot_grid(age, imr, life.expectancy, population, ncol = 2)
+```
+
+
+
+
+# Choropleths
+
+Here we present choropleths that display the absolute difference between the variables for each country.
+
+```{r}
+trim_df <- trim_df %>%
+  mutate(
+    PopDiff = abs(Male.population - Female.population),
+    IMRDiff = abs(Male.IMR.deaths.per.birth - Female.IMR.deaths.per.birth),
+    MedianAgeDiff = abs(Median.age.male - Median.age.female),
+    LifeExpectancyDiff = abs(Male.life.expectancy.at.birth - Female.life.expectancy.at.birth)
+  )
+
+plot_static_country_data <- function(df, country_col, value_col, 
+                                     fill_palette = "YlOrRd", 
+                                     legend_title = NULL, 
+                                     missing_color = "gray90") {
+  library(sf)
+  library(rnaturalearth)
+  library(rnaturalearthdata)
+  library(countrycode)
+  library(dplyr)
+  library(ggplot2)
+  
+  # Step 1: Clean + add ISO3 codes
+  df <- na.omit(df)
+  df$iso_a3 <- countrycode(df[[country_col]], "country.name", "iso3c")
+  df$iso_a3[df[[country_col]] == "Kosovo"] <- "XKX"
+
+  # Step 2: Load map
+  world <- ne_countries(returnclass = "sf", scale = "medium")
+  
+  # Step 3: Merge
+  joined <- left_join(world, df[, c("iso_a3", value_col)], by = "iso_a3")
+
+  # Step 4: Plot
+  ggplot(joined) +
+    geom_sf(aes(fill = .data[[value_col]]), color = "white", size = 0.1) +
+    scale_fill_distiller(palette = fill_palette, direction = 1, na.value = missing_color) +
+    labs(fill = legend_title %||% value_col) +
+    theme_void() +
+    theme(legend.position = "right")
+}
+```
+
+
+```{r, fig.width=10, fig.height=10}
+ma.map <- plot_static_country_data(
+  df = trim_df,
+  country_col = "Country",
+  value_col = "MedianAgeDiff",
+  fill_palette = "RdPu",
+  legend_title = "Abs. Difference in Median Ages"
+)
+
+imr.map <- plot_static_country_data(
+  df = trim_df,
+  country_col = "Country",
+  value_col = "IMRDiff",
+  fill_palette = "RdPu",
+  legend_title = "Abs. Difference in Infant Mortality Rate"
+)
+
+le.map <- plot_static_country_data(
+  df = trim_df,
+  country_col = "Country",
+  value_col = "LifeExpectancyDiff",
+  fill_palette = "RdPu",
+  legend_title = "Abs. Difference in Life Expectancy"
+)
+
+pop.map <- plot_static_country_data(
+  df = trim_df,
+  country_col = "Country",
+  value_col = "PopDiff",
+  fill_palette = "RdPu",
+  legend_title = "Abs. Difference in Population"
+)
+
+
+(ma.map | imr.map) / (le.map | pop.map)
+```
 
 
 # Conclusion
