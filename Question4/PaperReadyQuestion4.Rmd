@@ -1,0 +1,27 @@
+---
+title: "PaperReadyQuestion4"
+author: "Nick Chandler"
+date: "2025-07-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+In this section we seek to answer the question: "How do selected demographic statistics differ between males and females?". The statistics we examine are: 
+
+# Correlation
+
+
+# Univariate Statistical Graphics
+
+
+# PCA
+
+
+# Conclusion
+
+
