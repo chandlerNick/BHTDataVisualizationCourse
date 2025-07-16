@@ -207,7 +207,7 @@ plot_two_kde_plots_on_same_axes <- function(x1, x2,
 }
 ```
 
-### Median Age Across Genders
+### Kernel Density Estimates (KDE)
 ```{r, fig.width=10, fig.height=10}
 par(mfrow=c(2,2))
 
@@ -224,7 +224,17 @@ plot_two_kde_plots_on_same_axes(trim_df$Female.life.expectancy.at.birth, trim_df
 plot_two_kde_plots_on_same_axes(trim_df$Female.population, trim_df$Male.population, "Female", "Male", "Population of Males and Females", "Population")
 ```
 
+These graphics allow us to understand the distribution of statistics and variables from various countries. Specifically, we can see the relative shape, scale, and location of the distributions corresponding to males and females.
 
+- **Top-Left:** It appears that the male density is slightly higher until approximately age $32$ where the densities of males and females are approximately equal. From approximately age $33$ to $45$ the male density is larger. From approximately $45$ and onwards, the female density is larger.
+
+- **Top-Right:** The female density is larger at lower values of IMR, until about 0.02 where the male density is larger. This means that there is tendency for the female IMR in the examined countries to be smaller.
+
+- **Bottom-Left:** The shape of the male and female densities appear to be approximately equal though the male density is shifted slightly lower indicating a lower male life expectancy in many countries examined.
+
+- **Bottom-Right:** The densities for male and female are approximately equal. Still, using the rug plot, one can see a shift in the right tail of the distribution with a smaller population of women present in the outlying countries, India and China. This could be due to preference for male children in both of these societies.
+
+### Grouped Bar Charts
 ```{r}
 
 plot_gender_by_continent <- function(data, male_var, female_var, title, y_label) {
@@ -257,7 +267,7 @@ plot_gender_by_continent <- function(data, male_var, female_var, title, y_label)
 ```
 
 ```{r, fig.width=10, fig.height=10}
-age <- plot_gender_by_continent(trim_df, "Median.age.male", "Median.age.female", title="Median Age per Continent", y_label="Average Age (years)")
+age <- plot_gender_by_continent(trim_df, "Median.age.male", "Median.age.female", title="Median Age per Continent", y_label="Average, Median Age (years)")
 
 imr <- plot_gender_by_continent(trim_df, "Male.IMR.deaths.per.birth", "Female.IMR.deaths.per.birth", title="Infant Mortality Rate per Continent", y_label="Average IMR (deaths per birth)")
 
@@ -268,14 +278,23 @@ population <- plot_gender_by_continent(trim_df, "Male.population", "Female.popul
 plot_grid(age, imr, life.expectancy, population, ncol = 2)
 ```
 
+These graphics allow comparison of per-continent aggregates so one may glean various insights such as the ordering which different continents follow.
+
+- **Top-Left:** One sees an ordering of average median ages by continent/region. Europe has the population with the highest median age while Africa has the population with the lowest median age. In each region except the Middle East, the median age of females is higher than that of males.
+
+- **Top-Right:** One sees an ordering of average infant mortality rate by continent/region. Africa has the highest infant mortality rate while Europe has the smallest. The ordering is the same for both males and females though males tend to have a higher infant mortality rate than females.
+
+- **Bottom-Left:** One sees an ordering of average life expectancy by continent/region. North America has the highest average life expectancy and Africa has the lowest. Female life expectancy, as seen in the KDE plots tends to be higher than male life expectancy.
+
+- **Bottom-Right:** One sees an ordering of average population per continent/region. Asia has the highest average population and Oceania has the lowest. North America, South America, and Europe have more women than men whereas the other regions tend to have more men than women.
 
 
 
 # Choropleths
 
-Here we present choropleths that display the absolute difference between the variables for each country.
+Here we present choropleths that display the absolute difference between the variables for each country. Note that many countries are gray since our dataset did not provide gender-wise information on these areas.
 
-```{r}
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
 trim_df <- trim_df %>%
   mutate(
     PopDiff = abs(Male.population - Female.population),
@@ -312,18 +331,25 @@ plot_static_country_data <- function(df, country_col, value_col,
     scale_fill_distiller(palette = fill_palette, direction = 1, na.value = missing_color) +
     labs(fill = legend_title %||% value_col) +
     theme_void() +
-    theme(legend.position = "right")
+    theme(
+      legend.position = "right",
+      legend.title = element_text(size = 10),
+      legend.text = element_text(size = 8),
+      legend.key.size = unit(0.4, "cm"),
+      legend.margin = margin(0, 0, 0, 0),
+      legend.box.margin = margin(0, 0, 0, 0)
+    )
 }
 ```
 
 
-```{r, fig.width=10, fig.height=10}
+```{r, fig.width=14, fig.height=10, echo=FALSE, message=FALSE, warning=FALSE}
 ma.map <- plot_static_country_data(
   df = trim_df,
   country_col = "Country",
   value_col = "MedianAgeDiff",
   fill_palette = "RdPu",
-  legend_title = "Abs. Difference in Median Ages"
+  legend_title = "Abs. Diff. in Median Ages"
 )
 
 imr.map <- plot_static_country_data(
@@ -331,7 +357,7 @@ imr.map <- plot_static_country_data(
   country_col = "Country",
   value_col = "IMRDiff",
   fill_palette = "RdPu",
-  legend_title = "Abs. Difference in Infant Mortality Rate"
+  legend_title = "Abs. Diff. in Infant Mortality Rate"
 )
 
 le.map <- plot_static_country_data(
@@ -339,7 +365,7 @@ le.map <- plot_static_country_data(
   country_col = "Country",
   value_col = "LifeExpectancyDiff",
   fill_palette = "RdPu",
-  legend_title = "Abs. Difference in Life Expectancy"
+  legend_title = "Abs. Diff. in Life Expectancy"
 )
 
 pop.map <- plot_static_country_data(
@@ -347,14 +373,25 @@ pop.map <- plot_static_country_data(
   country_col = "Country",
   value_col = "PopDiff",
   fill_palette = "RdPu",
-  legend_title = "Abs. Difference in Population"
+  legend_title = "Abs. Diff. in Population"
 )
 
 
 (ma.map | imr.map) / (le.map | pop.map)
 ```
 
+These graphics allow us to visualize geospatial trends in the data at a finer granularity than classical statistical graphics such as bar charts. Additionally, by using the absolute difference, we are more able to visualize inequality across the world. Finally, since we take the absolute value, we remove information concerning who the inequality effects as the absolute value function is not surjective.
+
+- **Top-Left:** One sees that there is a large difference in median age in Eastern Europe, Russia, Saudi Arabia, and Mexico. There is a moderate difference in East Asia, South America, and parts of Africa. There is a smaller difference in the Middle East and other parts of Africa.
+
+- **Top-Right:** One sees that there is a large difference in the infant mortality rate in the Middle East and parts of Africa. There is a smaller difference elsewhere.
+
+- **Bottom-Left:** One sees that there is a large difference in life expectancy in Eastern Europe, Russia, Kazakhstan, Mongolia, and South America. In Africa and the Middle East, there tends to be a smaller difference.
+
+- **Bottom-Right:** One sees that there is a large difference in population in India and China. There is a moderate difference in population in Russia, and smaller differences elsewhere. Note that we consider raw counts here, not proportions.
+
 
 # Conclusion
 
+Through this analysis, we draw the following conclusions about the selected statistics and variables: Women tend to have longer life expectancy than men in general. On average countries tend to have older women than men. There are stark differences in the populations of men and women in China and India. Finally, men typically have a higher infant mortality rate, regardless of geographic region.
 
