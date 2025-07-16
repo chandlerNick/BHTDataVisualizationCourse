@@ -31,7 +31,7 @@ library(corrplot)
 
 In this section, we ask the question: "How do countries and continents differ with respect to selected human-geographic indicators and what conclusions could be drawn from these relationships?"
 
-We focus on several geographic, demographic, and economic indicators from the CIA world fact book. Specifically, in our analysis of the aforementioned question, we examine indicators related to economic output, access to medical care, and societal demographics. To begin the analysis, grouped bar charts of arable land and total land per continent are examined. Thereafter, we examine boxplots of real GDP per capita, infant mortality rate, and total population for each country, grouped by continent. We then examine a corrplot of select numeric variables using both Pearson's and Spearman's correlation coefficient. To conclude the analysis of this questions, we examine PCA of the same numeric variables, visualizing a raw variance plot, a cumulative proportion of variance explained plot, a biplot, and a plot of scores where each score is color coded by continent and labeled with the corresponding country.
+We focus on several geographic, demographic, and economic indicators from the CIA world fact book. Specifically, in our analysis of the aforementioned question, we examine indicators related to economic output, access to medical care, and societal demographics. To begin the analysis, grouped bar charts of arable land and total land per continent are examined. Thereafter, we examine boxplots of real GDP per capita, infant mortality rate, and total population for each country, grouped by continent. We then examine a corrplot of select numeric variables using both Pearson's and Spearman's correlation coefficient. To conclude the analysis of this question, we examine PCA of the same numeric variables, visualizing a raw variance plot, a cumulative proportion of variance explained plot, a biplot, and a plot of scores where each score is color coded by continent and labeled with the corresponding country.
 
 ```{r}
 # Function to display the columns and nan counts
@@ -130,8 +130,6 @@ The continents/regions we examine are:
 continents <- unlist(unique(trim_df$Continent))
 continents
 ```
-
-On the world map, these countries are: [world map with various countries color coded by region]
 
 
 ```{r}
