@@ -1,0 +1,270 @@
+---
+title: "Question5"
+output: html_document
+date: "2025-06-18"
+---
+```{r}
+library(dplyr)
+library(ggplot2)
+library(ggrepel)
+library(tidyr)
+library(ks)
+library(rgl)
+library(scales)
+library(MASS)
+library(plotly)
+library(fmsb)
+library(patchwork)
+library(tidyverse)
+library(aplpack)
+library(leaflet)
+library(rnaturalearth)
+library(countrycode)
+```
+
+```{r}
+df <- read.csv("../data/countries.csv")
+
+print(cat(colnames(df), sep = "\n"))
+```
+
+
+```{r}
+bad_values <- c('Akrotiri', 'American Samoa', 'Antarctica', 'Antigua and Barbuda',
+                'Ashmore and Cartier Islands', 'Baker Island', 'Bouvet Island',
+                'British Indian Ocean Territory', 'British Virgin Islands',
+                'Cayman Islands', 'Christmas Island', 'Clipperton Island', 'Cocos (Keeling) Islands',
+                'Coral Sea Islands', 'Dhekelia', 'Falkland Islands (Islas Malvinas)', 'Faroe Islands',
+                'French Polynesia', 'French Southern and Antarctic Lands', 'Gaza Strip', 'Gibraltar',
+                'Guernsey', 'Heard Island and McDonald Islands', 'Howland Island', 'Isle of Man',
+                'Jan Mayen', 'Jarvis Island', 'Jersey', 'Johnston Atoll', 'Kingman Reef', 'Macau', 'Midway Islands',
+                'Montserrat', 'Navassa Island', 'New Caledonia', 'Niue', 'Norfolk Island', 'Northern Mariana Islands',
+                'Palmyra Atoll', 'Paracel Islands', 'Pitcairn Islands', 'Saint Barthelemy', 'Saint Helena, Ascension, and Tristan da Cunha',
+                'Saint Martin', 'Saint Pierre and Miquelon', 'Sint Maarten', 'Spratly Islands', 'Svalbard', 'Tokelau',
+                'Turks and Caicos Islands', 'Virgin Islands', 'Wake Island', 'Wallis and Futuna', 'World', 'Greenland')
+
+df_clean <- df %>%
+  filter(!Country %in% bad_values)
+
+df_clean$Geography..Map.references[df_clean$Geography..Map.references == "Arctic Region"] <- "Europe"
+df_clean$Geography..Map.references[df_clean$Geography..Map.references == "AsiaEurope"] <- "Europe"
+
+
+```
+
+
+```{r}
+# Function to display the columns and nan counts
+col_names_and_nas <- function(df) {
+  for (i in seq_along(df)) {
+    cat(colnames(df)[i], ":", sum(is.na(df[[i]])), "\n")
+  }
+}
+
+# read data
+full_df <- df_clean
+```
+
+
+```{r}
+# Function to display the columns and nan counts
+col_names_and_nas <- function(df) {
+  for (i in seq_along(df)) {
+    cat(colnames(df)[i], ":", sum(is.na(df[[i]])), "\n")
+  }
+}
+
+# Trim data
+cols_to_keep <- c("Geography..Map.references","Environment..Total.water.withdrawal...municipal","Environment..Total.water.withdrawal...industrial","Environment..Total.water.withdrawal...agricultural","Environment..Air.pollutants...particulate.matter.emissions","Environment..Air.pollutants...carbon.dioxide.emissions","Environment..Air.pollutants...methane.emissions",                         "Economy..Real.GDP.per.capita", "People.and.Society..Population...total", "People.and.Society..Population.growth.rate", "People.and.Society..Birth.rate", "People.and.Society..Death.rate", "People.and.Society..Maternal.mortality.ratio", "People.and.Society..Infant.mortality.rate...total", "People.and.Society..Life.expectancy.at.birth...total.population" ,"People.and.Society..Physician.density",                   "Energy..Electricity...consumption",
+"Energy..Electricity...imports",
+"Energy..Coal...production",
+"Energy..Coal...consumption",
+"Energy..Coal...exports",
+"Energy..Coal...imports",
+"Energy..Petroleum...refined.petroleum.consumption",
+"Energy..Natural.gas...production",
+"Energy..Natural.gas...consumption",
+"Energy..Petroleum...total.petroleum.production",
+"Economy..Average.household.expenditures...on.food",
+"Energy..Natural.gas...imports" )
+
+trim_df <- full_df[,cols_to_keep]
+trim_df$Country <- full_df[,1]
+rownames(trim_df) <- full_df[,1]
+trim_df
+```
+
+```{r}
+library(stringr)
+
+library(dplyr)
+library(stringr)
+
+# Geography..Map.references
+colnames(trim_df)[colnames(trim_df) == "Geography..Map.references"] <- "Continent"
+
+# Fonction pour extraire, convertir et standardiser les volumes d'eau
+convert_water_volume <- function(column) {
+  as.numeric(str_extract(column, "[0-9.]+")) -> value
+  str_extract(column, "(billion|million|thousand)?\\s*cubic meters") -> unit
+  m3 <- case_when(
+    str_detect(unit, "billion") ~ value * 1e9,
+    str_detect(unit, "million") ~ value * 1e6,
+    str_detect(unit, "thousand") ~ value * 1e3,
+    TRUE ~ value
+  )
+  return(m3)
+}
+
+
+# Fonction pour extraire et convertir en metric tons (valeurs numériques)
+convert_metric_tons <- function(column) {
+  # Remplacer virgules par rien
+  clean_col <- str_replace_all(column, ",", "")
+  # Extraire la valeur numérique
+  value <- as.numeric(str_extract(clean_col, "[0-9.]+"))
+  # Extraire le multiplicateur (unit)
+  unit <- str_extract(clean_col, "(billion|million|thousand)?\\s*metric tons")
+  # Appliquer les conversions en tonnes
+  tons <- case_when(
+    str_detect(unit, "billion") ~ value * 1e9,
+    str_detect(unit, "million") ~ value * 1e6,
+    str_detect(unit, "thousand") ~ value * 1e3,
+    TRUE ~ value
+  )
+  return(tons)
+}
+
+
+#Fonction de conversion des barils par jour
+
+convert_bbl_per_day <- function(column) {
+  clean_col <- str_replace_all(column, ",", "")
+  value <- as.numeric(str_extract(clean_col, "[0-9.]+"))
+  unit <- str_extract(clean_col, "(billion|million|thousand)?\\s*bbl/day")
+
+  bbl <- case_when(
+    str_detect(unit, "billion") ~ value * 1e9,
+    str_detect(unit, "million") ~ value * 1e6,
+    str_detect(unit, "thousand") ~ value * 1e3,
+    TRUE ~ value
+  )
+  return(bbl)
+}
+
+trim_df <- trim_df %>%
+  mutate(
+    Water.withdrawal.industrial.m3 = convert_water_volume(`Environment..Total.water.withdrawal...industrial`),
+    Water.withdrawal.agricultural.m3 = convert_water_volume(`Environment..Total.water.withdrawal...agricultural`),
+    Water.withdrawal.municipal.m3 = convert_water_volume(Environment..Total.water.withdrawal...municipal),
+    Natural.gas.imports.m3 = convert_water_volume(Energy..Natural.gas...imports),
+    Natural.gas.consumption.m3 = convert_water_volume(Energy..Natural.gas...consumption),
+    Natural.gas.production.m3 = convert_water_volume(Energy..Natural.gas...production),
+  )
+
+trim_df <- trim_df %>%
+  mutate(
+    petrol.consumption.bbl = convert_bbl_per_day(Energy..Petroleum...refined.petroleum.consumption),
+    petrol.production.bbl = convert_bbl_per_day(Energy..Petroleum...total.petroleum.production)
+
+  )
+
+trim_df <- trim_df %>%
+  mutate(
+    Coal.consumption.tons = convert_metric_tons(`Energy..Coal...consumption`),
+    Coal.exports.tons = convert_metric_tons(`Energy..Coal...exports`),
+    Coal.imports.tons = convert_metric_tons(`Energy..Coal...imports`),
+    Coal.production.tons = convert_metric_tons(`Energy..Coal...production`)
+  )
+
+
+trim_df <- trim_df[, !(colnames(trim_df) %in% c(
+  "Environment..Total.water.withdrawal...industrial",
+  "Environment..Total.water.withdrawal...agricultural",
+  "Environment..Total.water.withdrawal...municipal",
+  "Energy..Natural.gas...imports",
+  "Energy..Natural.gas...consumption",
+  "Energy..Natural.gas...production",
+  "Energy..Coal...consumption",
+  "Energy..Coal...exports",
+  "Energy..Coal...imports",
+  "Energy..Coal...production",
+  "Energy..Petroleum...refined.petroleum.consumption",
+  "Energy..Petroleum...total.petroleum.production"
+  
+))]
+
+# Environment: Air pollutants - particulate matter emissions
+trim_df$Environment..Air.pollutants...particulate.matter.emissions <- 
+  as.numeric(str_extract(trim_df$Environment..Air.pollutants...particulate.matter.emissions, "[0-9.]+"))
+colnames(trim_df)[colnames(trim_df) == "Environment..Air.pollutants...particulate.matter.emissions"] <- "particulate_matter_emissions_microgramme_per_cubic_meter"
+
+# Environment: Air pollutants - carbon dioxide emissions
+trim_df$Environment..Air.pollutants...carbon.dioxide.emissions <- 
+  as.numeric(str_extract(trim_df$Environment..Air.pollutants...carbon.dioxide.emissions, "[0-9.]+"))
+colnames(trim_df)[colnames(trim_df) == "Environment..Air.pollutants...carbon.dioxide.emissions"] <- "CO2_emissions_Megatonne"
+
+# Environment: Air pollutants - methane emissions
+trim_df$Environment..Air.pollutants...methane.emissions <- 
+  as.numeric(str_extract(trim_df$Environment..Air.pollutants...methane.emissions, "[0-9.]+"))
+colnames(trim_df)[colnames(trim_df) == "Environment..Air.pollutants...methane.emissions"] <- "methane_emissions_Megatonne"
+
+# Economy..Real.GDP.per.capita
+trim_df$Economy..Real.GDP.per.capita <- as.numeric(gsub("[$,]", "", str_extract(trim_df$Economy..Real.GDP.per.capita, "\\$[0-9,]+")))
+colnames(trim_df)[colnames(trim_df) == "Economy..Real.GDP.per.capita"] <- "Real.GDP.per.capita.USD"
+
+# People.and.Society..Population.growth.rate
+trim_df$People.and.Society..Population.growth.rate <- as.numeric(sub("%", "", str_extract(trim_df$People.and.Society..Population.growth.rate, "[0-9.]+%"))) / 100
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Population.growth.rate"] <- "Population.growth.rate.percent"
+
+# People.and.Society..Birth.rate - births 
+trim_df$People.and.Society..Birth.rate <- as.numeric(str_extract(trim_df$People.and.Society..Birth.rate, "^[0-9]+")) / 1000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Birth.rate"] <- "Live.births.per.1000.people"
+
+# People.and.Society..Death.rate - deaths per person 
+trim_df$People.and.Society..Death.rate <- as.numeric(str_extract(trim_df$People.and.Society..Death.rate, "^[0-9]+")) / 1000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Death.rate"] <- "Deaths.per.1000.people"
+
+# People.and.Society..Maternal.mortality.ratio - deaths per live birth
+trim_df$People.and.Society..Maternal.mortality.ratio <- as.numeric(gsub(",", "", str_extract(trim_df$People.and.Society..Maternal.mortality.ratio, "^[0-9]+"))) / 100000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Maternal.mortality.ratio"] <- "Maternal.deaths.per.100000.live.births"
+
+# People.and.Society..Infant.mortality.rate...total - deaths per live birth
+trim_df$People.and.Society..Infant.mortality.rate...total <- as.numeric(str_extract(trim_df$People.and.Society..Infant.mortality.rate...total, "^[0-9.]+")) / 1000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Infant.mortality.rate...total"] <- "Infant.deaths.per.1000.live.births"
+
+# People.and.society..Life.expectancy.at.birth...total.population
+trim_df$People.and.Society..Life.expectancy.at.birth...total.population <- as.numeric(str_extract(trim_df$People.and.Society..Life.expectancy.at.birth...total.population, "^[0-9.]+"))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Life.expectancy.at.birth...total.population"] <- "Life.expectancy.at.birth"
+
+# People.and.Society..Population...total
+trim_df$People.and.Society..Population...total <- as.numeric(gsub(",", "", str_extract(trim_df$People.and.Society..Population...total, "^[0-9,]+")))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Population...total"] <- "Total.population"
+
+# People.and.Society..Physician.density
+trim_df$People.and.Society..Physician.density <- as.numeric(str_extract(trim_df$People.and.Society..Physician.density, "^[0-9.]+")) / 1000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Physician.density"] <- "Physicians.per.1000.people"
+
+
+# Economy..Average.household.expenditures...on.food
+trim_df$Economy..Average.household.expenditures...on.food <- as.numeric(sub("%", "", str_extract(trim_df$Economy..Average.household.expenditures...on.food, "[0-9.]+%"))) / 100
+colnames(trim_df)[colnames(trim_df) == "Economy..Average.household.expenditures...on.food"] <- "household.expenditures.food.percent"
+
+
+trim_df
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
