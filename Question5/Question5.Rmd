@@ -258,8 +258,16 @@ trim_df
 
 
 
+```{r}
+summary(trim_df)
+```
 
 
+```{r}
+data1 <- read.csv("../data/FAO_Dataset_2022.csv", stringsAsFactors = FALSE)
+
+data1
+```
 
 
 
