@@ -240,15 +240,15 @@ for (i in 1:nrow(data)) {
         if (distance < 10 && line_thickness > 20) {
           curvature_category <- "extreme"
           curvature_value <- 1.2
-        } else if (distance < 10 && line_thickness > 5) {
+        } else if (distance < 10 || line_thickness > 10) {
           curvature_category <- "very_high"
           curvature_value <- 0.9
         } else if (distance < 10) {
           curvature_category <- "high"
           curvature_value <- 0.6
-        } else if (distance < 30 && line_thickness > 10) {
+        } else if (distance < 30 || line_thickness > 5) {
           curvature_category <- "medium_high"
-          curvature_value <- 0.5
+          curvature_value <- 0.9
         } else if (distance < 30) {
           curvature_category <- "medium"
           curvature_value <- 0.3
@@ -296,7 +296,7 @@ world_map <- map_data("world")
 # Function to get bend factor based on level and distance
 get_bend_factor <- function(level, distance) {
   base_levels <- list(
-    "low" = 3,         
+    "low" = 3.5,         
     "medium" = 3.5,      
     "medium_high" = 4, 
     "high" = 4.5,        

@@ -17,18 +17,14 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 
 This document visualizes relationships between countries based on mentions in their background information. The network graph shows how countries are connected, with node sizes representing the number of connections and colors representing continents.
 
-## Load Required Libraries
-
-```{r libraries}
+```{r libraries, echo=FALSE}
 library(readr)      # For reading CSV files
 library(RColorBrewer)  # For color palettes
 library(igraph)     # For network visualization
 library(visNetwork) # For interactive network visualization
 ```
 
-## Data Loading and Preprocessing
-
-```{r data_loading}
+```{r data_loading, echo=FALSE} 
 # Load the CSV file
 countries_data <- read_csv("/home/luisa/Documents/University/BHT/Data Visualization/BHTDataVisualizationCourse/data/clean_data.csv")
 
@@ -45,9 +41,7 @@ if ("World" %in% names(countries)) {
 }
 ```
 
-## Define Country Relationships
-
-```{r define_relationships}
+```{r define_relationships, echo=FALSE}
 # Create a data structure to store country relationships
 country_relationships <- list()
 
@@ -121,9 +115,7 @@ for (country_name in names(countries)) {
 }
 ```
 
-## Create Network Matrix
-
-```{r create_matrix}
+```{r create_matrix, echo=FALSE}
 # Convert the relationships to a matrix format
 countries_list <- unique(names(country_relationships))
 n_countries <- length(countries_list)
@@ -169,7 +161,7 @@ filtered_continents <- country_continents[has_relationships]
 
 ## Create Network Visualization
 
-```{r network_plot, fig.width=12, fig.height=10}
+```{r network_plot, fig.width=12, fig.height=10, echo=FALSE}
 # Create an igraph object
 g <- graph_from_adjacency_matrix(filtered_matrix, mode = "directed", weighted = TRUE)
 

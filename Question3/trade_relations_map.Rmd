@@ -75,10 +75,10 @@ country_alternatives <- list(
   "Sweden" = c("Swedish"),
   "Norway" = c("Norwegian"),
   "Denmark" = c("Danish"),
-  "Finland" = c("Finnish"),
   "Switzerland" = c("Swiss"),
   "Poland" = c("Polish"),
   "Hungary" = c("Hungarian"),
+  "Finland" = c("Finnish"),
   "United Arab Emirates" = c("UAE", "Emirates"),
   "New Zealand" = c("NZ"),
   "Trinidad and Tobago" = c("Trinidad & Tobago")
