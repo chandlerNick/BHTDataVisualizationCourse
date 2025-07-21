@@ -21,7 +21,6 @@ This document visualizes relationships between countries based on mentions in th
 library(readr)      # For reading CSV files
 library(RColorBrewer)  # For color palettes
 library(igraph)     # For network visualization
-library(visNetwork) # For interactive network visualization
 ```
 
 ```{r data_loading, echo=FALSE} 
@@ -159,10 +158,10 @@ filtered_countries <- countries_list[has_relationships]
 filtered_continents <- country_continents[has_relationships]
 ```
 
-## Create Network Visualization
+## Static Network Visualization
 
-```{r network_plot, fig.width=12, fig.height=10, echo=FALSE}
-# Create an igraph object
+```{r network_plot_static, fig.width=12, fig.height=10, echo=FALSE}
+# Create an igraph object from the filtered matrix
 g <- graph_from_adjacency_matrix(filtered_matrix, mode = "directed", weighted = TRUE)
 
 # Set vertex attributes for continents
@@ -183,7 +182,32 @@ continent_colors <- c(
   "Arctic Region" = "#004D40"     # Dark teal
 )
 
-# Calculate node sizes
+# Map continents to colors
+V(g)$color <- sapply(V(g)$continent, function(cont) {
+  if(cont %in% names(continent_colors)) {
+    return(continent_colors[cont])
+  } else {
+    return("#808080")  # Default gray for any unmapped continents
+  }
+})
+
+# Set all edge weights to a low value to reduce attraction
+E(g)$weight <- 0.1  # Reduce attraction between connected nodes
+
+# Create a better layout with reduced attraction to spread countries more
+set.seed(1)
+layout <- layout_with_fr(g, 
+                        niter = 2000,  # Increase iterations for better convergence
+                        dim = 2,
+                        grid = "grid",
+                        weights = E(g)$weight,  # Use our reduced weights
+                        start.temp = 20  # Higher temperature for more initial movement
+)
+
+# Manually scale the layout to spread nodes more
+layout <- layout * 6
+
+# Calculate node degrees and sizes
 node_degrees <- degree(g, mode = "all")
 min_size <- 3
 max_size <- 14
@@ -191,112 +215,67 @@ min_degree <- min(node_degrees)
 max_degree <- max(node_degrees)
 vertex_sizes <- min_size + (node_degrees - min_degree) * (max_size - min_size) / (max_degree - min_degree)
 
-# Create the nodes dataframe
-nodes_df <- data.frame(
-  id = 1:length(V(g)),
-  label = V(g)$name,
-  group = V(g)$continent,
-  value = vertex_sizes,
-  title = paste0("<p><b>", V(g)$name, "</b><br>",
-                "Continent: ", V(g)$continent, "<br>",
-                "Connections: ", node_degrees, "</p>")
-)
+# Modify country labels for display
+country_display_names <- V(g)$name
+country_display_names[country_display_names == "United States"] <- "USA"
+country_display_names[country_display_names == "Korea, South"] <- "South Korea"
+country_display_names[country_display_names == "Turkey (Turkiye)"] <- "Turkey"
 
-# Add color information separately to avoid data.frame conversion issues
-nodes_df$color <- lapply(V(g)$continent, function(cont) {
-  if(cont %in% names(continent_colors)) {
-    list(
-      background = continent_colors[cont],
-      border = continent_colors[cont],
-      highlight = list(
-        background = continent_colors[cont],
-        border = "#FFFF00"
-      )
-    )
-  } else {
-    list(
-      background = "#808080",
-      border = "#808080",
-      highlight = list(
-        background = "#808080",
-        border = "#FFFF00"
-      )
-    )
-  }
-})
+# Determine which countries to show labels for
+show_labels <- node_degrees >= 15
+show_labels[V(g)$name == "Ukraine"] <- TRUE
+show_labels[V(g)$name == "Micronesia, Federated States of"] <- FALSE
+show_labels[V(g)$name == "Brazil"] <- TRUE
+show_labels[V(g)$name == "Mexico"] <- TRUE
+show_labels[V(g)$name == "Turkey (Turkiye)"] <- TRUE
+show_labels[V(g)$name == "Saudi Arabia"] <- TRUE
+show_labels[V(g)$name == "Argentina"] <- TRUE
+show_labels[V(g)$name == "South Africa"] <- TRUE
+show_labels[V(g)$name == "Egypt"] <- TRUE
+show_labels[V(g)$name == "Namibia"] <- TRUE
+show_labels[V(g)$name == "Morocco"] <- TRUE
+show_labels[V(g)$name == "Vietnam"] <- TRUE
+show_labels[V(g)$name == "Venezuela"] <- TRUE
+show_labels[V(g)$name == "Chile"] <- TRUE
 
-edges_df <- as.data.frame(get.edgelist(g, names = FALSE))
-colnames(edges_df) <- c("from", "to")
+# Plot the network
+plot(g, 
+     layout = layout, 
+     vertex.size = vertex_sizes,     # Size based on connectivity
+     vertex.color = V(g)$color,      # Color by continent
+     vertex.label = ifelse(show_labels, country_display_names, NA),
+     vertex.label.cex = 0.75,        # Label size
+     vertex.label.color = "black",
+     vertex.label.family = "sans",
+     vertex.label.font = 2,
+     vertex.frame.color = "gray90",
+     edge.width = 0.5,               # Lighter edges
+     edge.color = "gray85",
+     edge.arrow.size = 0,
+     main = "Country Relationships Network")
 
-# Create interactive network visualization
-visNetwork(nodes_df, edges_df, main = "Country Relationships Network") %>%
-  visOptions(
-    highlightNearest = list(
-      enabled = TRUE,
-      degree = 1,
-      hover = TRUE
-    ),
-    selectedBy = list(
-      variable = "group",
-      values = unique(V(g)$continent),
-      multiple = TRUE,
-      highlight = TRUE,
-      main = "Continent"
-    )
-  ) %>%
-  visEdges(
-    color = list(
-      color = "#202020",
-      highlight = "#202020"
-    )
-  ) %>%
-  visPhysics(
-    stabilization = list(
-      enabled = TRUE,
-      iterations = 100,
-      fit = TRUE,
-      onlyDynamicEdges = FALSE,
-      updateInterval = 50
-    ),
-    barnesHut = list(
-      gravitationalConstant = -2000,
-      springConstant = 0.04,
-      springLength = 95,
-      damping = 0.5
-    ),
-    minVelocity = 0.75,
-    maxVelocity = 50,
-    solver = "barnesHut"
-  ) %>%
-  visLayout(
-    randomSeed = 1,
-    improvedLayout = TRUE
-  ) %>%
-  visInteraction(
-    hover = TRUE,
-    hoverConnectedEdges = TRUE,
-    selectConnectedEdges = TRUE,
-    dragNodes = TRUE,
-    dragView = TRUE,
-    zoomView = TRUE
-  ) %>%
-  visLegend(
-    useGroups = FALSE,
-    addNodes = list(
-      list(label = "North America", color = list(background = "#0D47A1", border = "#0D47A1"), shape = "dot", size = 10),
-      list(label = "Europe", color = list(background = "#1976D2", border = "#1976D2"), shape = "dot", size = 10),
-      list(label = "Asia", color = list(background = "#B71C1C", border = "#B71C1C"), shape = "dot", size = 10),
-      list(label = "Southeast Asia", color = list(background = "#E57373", border = "#E57373"), shape = "dot", size = 10),
-      list(label = "Middle East", color = list(background = "#E65100", border = "#E65100"), shape = "dot", size = 10),
-      list(label = "Africa", color = list(background = "#2E7D32", border = "#2E7D32"), shape = "dot", size = 10),
-      list(label = "Central America", color = list(background = "#FBC02D", border = "#FBC02D"), shape = "dot", size = 10),
-      list(label = "South America", color = list(background = "#F9A825", border = "#F9A825"), shape = "dot", size = 10),
-      # list(label = "AsiaEurope", color = list(background = "#6A1B9A", border = "#6A1B9A"), shape = "dot", size = 10),
-      list(label = "Oceania", color = list(background = "#00838F", border = "#00838F"), shape = "dot", size = 10),
-      list(label = "Arctic Region", color = list(background = "#004D40", border = "#004D40"), shape = "dot", size = 10)
-    ),
-    width = 0.15,
-    position = "left",
-    main = "Continents"
-  )
+# Add a legend for continents
+legend("bottomright", 
+       legend = names(continent_colors),
+       fill = continent_colors, 
+       title = "Continents",
+       cex = 1,
+       bty = "n")
+
+# Example degrees for the size legend
+example_degrees <- c(min_degree, round(mean(node_degrees)), max_degree)
+example_labels <- as.character(example_degrees)
+example_sizes <- min_size + (example_degrees - min_degree) * (max_size - min_size) / (max_degree - min_degree)
+
+# Add a second legend for node sizes
+legend(x = 1, y = 0.35,
+       legend = example_labels,
+       pt.cex = example_sizes / 2 * 0.8,
+       pch = 21,
+       pt.bg = "gray80",
+       title = "Node Size:\n# of Connections",
+       bty = "n",
+       y.intersp = 1.5,
+       x.intersp = 1.5,
+       xpd = TRUE)
 ```
