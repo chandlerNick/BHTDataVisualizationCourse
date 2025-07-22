@@ -289,10 +289,7 @@ data1 <- read.csv("../data/FAO_Dataset_19_23.csv", stringsAsFactors = FALSE)
 view(data1)
 ```
 
-```{r}
-actual_cols = colnames(data1)
-actual_cols
-```
+
 
 
 
@@ -346,9 +343,6 @@ print(missing_cols)
 
 ```
 
-```{r}
-view(selected_df)
-```
 
 
 ```{r}
@@ -401,25 +395,45 @@ colnames(selected_df) <- new_names
 data1 = selected_df
 data1$Area[222] <- "United States"
 data1$Area[216] <- "Turkey (Turkiye)"
+data1$Area[174] <-  "Russia"
 
 data1$Area[220] <- "United Kingdom"
 
 ```
 
+
+
 ```{r}
 trim_df$ID_Npm_Country <- rownames(trim_df)
 
-```
-
-
-```{r}
 merged_df <- merge(trim_df, data1, 
                    by.x = "ID_Npm_Country",   # colonne dans trim_df
                    by.y = "Area",     # colonne correspondante dans data1
                    all.x = TRUE)              # merge à gauche (keep all trim_df rows)
 merged_df <- merged_df %>%
-  mutate(npk_agricultural_use_ha = npk_Agricultural_Use_t / (Cropland_Area_1000_ha * 1000))
-merged_df
+  mutate(npk_per_ha = npk_Agricultural_Use_t / (Cropland_Area_1000_ha * 1000))
+
+merged_df <- merged_df %>%
+  mutate(Herbicides_per_HA = Herbicides_Agricultural_Use_t / (Cropland_Area_1000_ha * 1000))
+
+merged_df <- merged_df %>%
+  mutate(Insecticides_per_HA = Insecticides_Agricultural_Use_t / (Cropland_Area_1000_ha * 1000))
+
+
+
+merged_df <- merged_df %>%
+  mutate(Coal.consumption.per.HA = Coal.consumption.tons / (Cropland_Area_1000_ha * 1000))
+
+merged_df <- merged_df %>%
+  mutate(petrol.consumption.per.HA = petrol.consumption.bbl / (Cropland_Area_1000_ha * 1000))
+
+merged_df <- merged_df %>%
+  mutate(Natural.gas.per.HA = Natural.gas.consumption.m3 / (Cropland_Area_1000_ha * 1000))
+
+merged_df <- merged_df %>%
+  mutate(agricultural.Water.withdrawal.per.HA = Water.withdrawal.agricultural.m3 / (Cropland_Area_1000_ha * 1000))
+
+
 ```
 
 
@@ -439,7 +453,7 @@ merged_df
 library(ggplot2)
 
 
-ggplot(merged_df, aes(x = petrol.consumption.bbl, y = cereal_yield_kg_ha)) +
+ggplot(merged_df, aes(x = petrol.consumption.per.HA, y = cereal_yield_kg_ha)) +
   geom_point(aes(color = Continent), size = 3, alpha = 0.7) +
   scale_x_log10() +  # better spread
   labs(
@@ -448,6 +462,49 @@ ggplot(merged_df, aes(x = petrol.consumption.bbl, y = cereal_yield_kg_ha)) +
     y = "Cereal Yield (kg/ha)"
   ) +
   theme_minimal()
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(scales)
+
+df_plot <- merged_df %>%
+  select(ID_Npm_Country, cereal_prod_t) %>%
+  filter(!is.na(cereal_prod_t)) %>%
+  group_by(ID_Npm_Country) %>%
+  summarise(total_prod = sum(cereal_prod_t, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(perc = 100 * total_prod / sum(total_prod)) %>%
+  filter(perc >= 1) %>%
+  arrange(desc(perc))
+
+# 1. Ajouter le rendement (par moyenne si plusieurs lignes par pays)
+yield_df <- merged_df %>%
+  select(ID_Npm_Country, cereal_yield_kg_ha) %>%
+  group_by(ID_Npm_Country) %>%
+  summarise(mean_yield = mean(cereal_yield_kg_ha, na.rm = TRUE))
+merged_df
+yield_df
+# 2. Rejoindre avec df_plot
+df_plot <- df_plot %>%
+  left_join(yield_df, by = "ID_Npm_Country")
+
+# 3. Barplot avec couleur = rendement
+ggplot(df_plot, aes(x = reorder(ID_Npm_Country, -perc), y = perc, fill = mean_yield)) +
+  geom_bar(stat = "identity") +
+  labs(
+    title = "Cereal Production Share by Country",
+    subtitle = "Includes wheat, rice, maize, barley, etc.",
+    x = "Country",
+    y = "Production Percentage (%)",
+    fill = "Average Yield\n(kg per hectare)"
+  ) +
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) +
+  scale_fill_viridis_c(option = "D", direction = -1) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1))
+
 ```
 # PCA 
 
@@ -458,66 +515,60 @@ library(FactoMineR)
 library(factoextra)
 library(janitor)
 
-# Variables retenues
-Vars_Simple <- c(
-  "cereal_yield_kg_ha",  
-  "npk_import_t",
-  "npk_export_t",
-  "Natural.gas.imports.m3", 
-  "Coal.imports.tons", 
-
-  "Water.withdrawal.agricultural.m3",
-  "methane_emissions_Megatonne"
-)
 
   
 vars_pca <- c(
   "cereal_yield_kg_ha", 
-  "fruit_yield_kg_ha", 
+  #"fruit_yield_kg_ha", 
   "maize_yield_kg_ha",
   "pulses_yield_kg_ha",
-  
-  #"sugar_crop_yield_kg_ha", 
+  "sugar_crop_yield_kg_ha", 
   #"eggs_yield_g_animal",
   #"sheep_goat_meat_yield_kg",
 
-  #"npk_import_t", 
-  #"npk_export_t",
+  
+  "Coal.consumption.per.HA",
+  "petrol.consumption.per.HA",
+  "Natural.gas.per.HA",
+  "agricultural.Water.withdrawal.per.HA",
   
 
-  "Coal.consumption.tons",
-  "petrol.consumption.bbl",
-  "Natural.gas.consumption.m3",
+  
+  "Insecticides_per_HA",
+  "npk_per_ha",
+  "Herbicides_per_HA",
+  "agri_prod_value_usdppp_per_ha"
 
   
+  #"Coal.consumption.tons",
+  #"petrol.consumption.bbl",
+  #"Natural.gas.consumption.m3",
+  #"Water.withdrawal.agricultural.m3",
   
-  "npk_Agricultural_Use_t",
-  "npk_agricultural_use_ha",
+  #"npk_Agricultural_Use_t",
   #"pk_Agricultural_Use_t",
   #"Urea_Agricultural_Use_t",
   #"Herbicides_Agricultural_Use_t",
   #"Insecticides_Agricultural_Use_t",
-
-  "Water.withdrawal.agricultural.m3",
-
+  
   #"agri_land_share_total_land_pct", 
   #"arable_land_share_agri_pct",
   #"perm_crops_share_agri_pct", 
   #"perm_pasture_share_agri_pct",
   #"irrigation_share_cropland_pct"
 
-  #"agri_prod_value_usdppp_per_ha"
-  "Country_area1000_ha",                                                                                                "Cropland_Area_1000_ha",
+
+  #"Country_area1000_ha",                                                                                               # "Cropland_Area_1000_ha"
  
  # Production 
  
-  "cereal_prod_t",
-  "eggs_prod_t",
-  "fruit_prod_t",
-  "maize_prod_t",
-  "milk_prod_t",
-  "pulses_prod_t",
-  "sugar_crop_prod_t"
+  #"cereal_prod_t",
+  #"eggs_prod_t",
+  #"fruit_prod_t",
+  #"maize_prod_t",
+  #"milk_prod_t",
+  #"pulses_prod_t",
+  #"sugar_crop_prod_t"
 )
 
 var_categories <- c(
@@ -537,9 +588,18 @@ var_categories <- c(
   "Coal.consumption.tons"= "Energy",
   "petrol.consumption.bbl"= "Energy",
   "Natural.gas.consumption.m3"= "Energy",
-  "npk_import_t" = "Fertilizer",
-  "npk_export_t" = "Fertilizer",
-  "npk_agricultural_use_ha"= "Fertilizer",
+    
+  "Coal.consumption.per.HA"= "Energy",
+  "petrol.consumption.per.HA"= "Energy",
+  "Natural.gas.per.HA"= "Energy",
+  "agricultural.Water.withdrawal.per.HA"= "Energy",
+  
+  
+  
+  "Insecticides_per_HA" = "Fertilizer",
+  
+  "Herbicides_per_HA" = "Fertilizer",
+  "npk_per_ha"= "Fertilizer",
   "npk_Agricultural_Use_t"= "Fertilizer",
   "pk_Agricultural_Use_t"= "Fertilizer",
   "Urea_Agricultural_Use_t"= "Fertilizer",
@@ -575,20 +635,6 @@ var_categories <- c(
 ```
 
 ```{r}
-# 1. Identifier les pays avec ≥ 1% de la production totale
-countries_above_threshold <- merged_df %>%
-  select(ID_Npm_Country, cereal_prod_t) %>%
-  filter(!is.na(cereal_prod_t)) %>%
-  group_by(ID_Npm_Country) %>%
-  summarise(total_prod = sum(cereal_prod_t, na.rm = TRUE)) %>%
-  mutate(perc = 100 * total_prod / sum(total_prod)) %>%
-  filter(perc >= 1) %>%
-  pull(ID_Npm_Country)
-
-# 2. Construire pca_data UNIQUEMENT avec ces pays
-filter_data <- merged_df %>%
-  filter(ID_Npm_Country %in% countries_above_threshold)
-
 
 pca_data <- merged_df %>%
   select(all_of(vars_pca), Continent, ID_Npm_Country) %>%
@@ -596,66 +642,16 @@ pca_data <- merged_df %>%
 
 pca_data <- merged_df %>%
   select(all_of(vars_pca), Continent, ID_Npm_Country) %>%
-  filter(rowMeans(is.na(.)) <= 0.2)
-
-
+  filter(rowMeans(is.na(.)) <= 0.20)
 
 library(missMDA)
 X_incomplete <- scale(pca_data %>% select(all_of(vars_pca)))
-
-
 # Imputation
 imputed <- imputePCA(X_incomplete, ncp = 2)  # ou plus de dimensions
 X <- imputed$completeObs
 
 
-# 3. Supprimer les colonnes constantes et standardiser
-# Standardiser les données (important pour la PCA)
-
-
 ```
-
-```{r}
-pca_data
-```
-
-
-
-
-
-
-
-```{r}
-library(dplyr)
-library(ggplot2)
-library(scales)
-
-# 1. Ajouter le rendement (par moyenne si plusieurs lignes par pays)
-yield_df <- merged_df %>%
-  select(ID_Npm_Country, cereal_yield_kg_ha) %>%
-  group_by(ID_Npm_Country) %>%
-  summarise(mean_yield = mean(cereal_yield_kg_ha, na.rm = TRUE))
-
-# 2. Rejoindre avec df_plot
-df_plot <- df_plot %>%
-  left_join(yield_df, by = "ID_Npm_Country")
-
-# 3. Barplot avec couleur = rendement
-ggplot(df_plot, aes(x = reorder(ID_Npm_Country, -perc), y = perc, fill = mean_yield)) +
-  geom_bar(stat = "identity") +
-  labs(
-    title = "Cereal production per country",
-    x = "Country",
-    y = "Production (%)",
-    fill = "Yield\nmean (kg/ha)"
-  ) +
-  scale_y_continuous(labels = percent_format(scale = 1)) +
-  scale_fill_viridis_c(option = "D", direction = -1) +  # ou scale_fill_gradient()
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 60, hjust = 1))
-
-```
-
 
 
 
@@ -683,8 +679,8 @@ fviz_pca_var(res_pca,
 
 
 ```{r}
-fviz_contrib(res_pca, choice = "var", axes = 1, top = 15)
-fviz_contrib(res_pca, choice = "var", axes = 2, top = 15)
+fviz_contrib(res_pca, choice = "var", axes = 1, top = 10)
+fviz_contrib(res_pca, choice = "var", axes = 2, top = 10)
 ```
 
 
@@ -743,11 +739,33 @@ corr_data <- merged_df %>% select(all_of(vars_pca)) %>% cor(use = "complete.obs"
 corrplot(corr_data, method = "color", type = "upper", tl.col = "black", addCoef.col = "black")
 
 ```
+```{r}
+vars <- c(
+  "cereal_yield_kg_ha", "fruit_yield_kg_ha", "maize_yield_kg_ha", "pulses_yield_kg_ha",
+  "sugar_crop_yield_kg_ha", "eggs_yield_g_animal", "sheep_goat_meat_yield_kg",
+  "Coal.consumption.per.HA", "petrol.consumption.per.HA", "Natural.gas.per.HA",
+  "agricultural.Water.withdrawal.per.HA", "Insecticides_per_HA",
+  "npk_per_ha", "Herbicides_per_HA", "agri_prod_value_usdppp_per_ha"
+)
+
+pca_data <- merged_df %>%
+  select(Country, Continent, all_of(vars))
+pca_data
+```
 
 
 ```{r}
-library(randomForest)
-rf <- randomForest(cereal_yield_kg_ha ~ ., data = X, importance = TRUE)
-varImpPlot(rf)
+library(ggplot2)
+library(sf)
+
+# Exemple : carte du NPK par hectare
+world <- ne_countries(scale = "medium", returnclass = "sf")  # Natural Earth map
+map_data <- left_join(world, pca_data, by = c("name" = "Country"))
+
+ggplot(map_data) +
+  geom_sf(aes(fill = petrol.consumption.per.HA)) +
+  scale_fill_viridis_c() +
+  theme_minimal() +
+  labs(title = "NPK use per hectare by country", fill = "kg/ha")
 ```
 
