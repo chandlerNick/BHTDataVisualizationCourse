@@ -1,0 +1,387 @@
+---
+title: "Final_Project_Energy"
+output: html_document
+date: "2025-07-22"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+
+
+## Including Plots
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(fmsb)
+library(tibble)
+library(plotly)
+```
+
+## Introduction
+We want to find out if the energy profiles of different countries is related to GDP.
+
+## Data Cleaning
+
+```{r}
+#load dataframe
+wfb_df <- read.csv('cleaned_wfb.csv')
+
+
+### Coal
+
+#function to clean columns related to coal
+clean_coal_column <- function(x) {
+  # Remove text like 'metric tons' and any parentheses content
+  x <- gsub(" metric tons.*", "", x)  # Remove 'metric tons' and anything after it
+  x <- gsub("\\(.*\\)", "", x)         # Remove anything in parentheses like '(2022 est.)'
+  
+  # Convert 'million' to 1e6 and 'billion' to 1e9
+  x <- gsub(" million", "e6", x)      # Convert 'million' to 'e6'
+  x <- gsub(" billion", "e9", x)      # Convert 'billion' to 'e9'
+  x <- gsub(" trillion", "e12", x)      # Convert 'trillion' to 'e12'
+  
+  # Remove any commas and extra spaces
+  x <- gsub(",", "", x)  # Remove commas
+  
+  # Convert to numeric after handling the units
+  return(as.numeric(x))  # Convert the cleaned string to numeric
+}
+
+#Clean column for coal production
+wfb_df$Energy..Coal...production = sapply(wfb_df$Energy..Coal...production, clean_coal_column)
+
+
+#coal in metric tonnes; convert to BTU
+#using 11,500 BTU/lb according to NC State
+wfb_df$Energy..Coal...production = wfb_df$Energy..Coal...production *2204.62*11500
+
+
+#Clean and convert column for Energy..Coal...import
+wfb_df$Energy..Coal...imports = sapply(wfb_df$Energy..Coal...imports, clean_coal_column)
+wfb_df$Energy..Coal...imports = wfb_df$Energy..Coal...imports *2204.62*11500
+
+#Clean and convert column for Energy..Coal...exports
+wfb_df$Energy..Coal...exports = sapply(wfb_df$Energy..Coal...exports, clean_coal_column)
+wfb_df$Energy..Coal...exports = wfb_df$Energy..Coal...exports *2204.62*11500
+
+
+
+### Natural Gas
+
+#function to clean columns related to natural gas
+clean_natural_gas_column <- function(x) {
+  # Remove text like 'cubic meters' and any parentheses content
+  x <- gsub(" cubic meters.*", "", x)  # Remove 'metric tons' and anything after it
+  x <- gsub("\\(.*\\)", "", x)         # Remove anything in parentheses like '(2022 est.)'
+  
+  # Convert 'million' to 1e6 and 'billion' to 1e9
+  x <- gsub(" million", "e6", x)      # Convert 'million' to 'e6'
+  x <- gsub(" billion", "e9", x)      # Convert 'billion' to 'e9'
+  x <- gsub(" trillion", "e12", x)      # Convert 'trillion' to 'e12'
+  
+  # Remove any commas and extra spaces
+  x <- gsub(",", "", x)  # Remove commas
+  
+  # Convert to numeric after handling the units
+  return(as.numeric(x))  # Convert the cleaned string to numeric
+}
+
+#clean column for natural gas production
+wfb_df$Energy..Natural.gas...production = sapply(wfb_df$Energy..Natural.gas...production, clean_natural_gas_column)
+
+
+#natural gas in cubic meters; convert to BTU
+#34,121 BTU/m^3 according to BP
+#i never cleaned this column yet
+wfb_df$Energy..Natural.gas...production = wfb_df$Energy..Natural.gas...production * 34121
+
+
+
+#also clean Natural.gas..imports
+wfb_df$Energy..Natural.gas...imports = sapply(wfb_df$Energy..Natural.gas...imports, clean_natural_gas_column)
+wfb_df$Energy..Natural.gas...imports = wfb_df$Energy..Natural.gas...imports * 34121
+
+# Clean column for Energy..Natural.gas...exports
+wfb_df$Energy..Natural.gas...exports = sapply(wfb_df$Energy..Natural.gas...exports, clean_natural_gas_column)
+wfb_df$Energy..Natural.gas...exports = wfb_df$Energy..Natural.gas...exports * 34121
+
+
+
+### Petroleum
+
+#function to clean columns related to petroleum
+clean_petroleum_column <- function(x) {
+  # Remove text like 'metric tons' and any parentheses content
+  x <- gsub(" bbl/day.*", "", x)  # Remove 'metric tons' and anything after it
+  x <- gsub("\\(.*\\)", "", x)         # Remove anything in parentheses like '(2022 est.)'
+  
+  # Convert 'million' to 1e6 and 'billion' to 1e9
+  x <- gsub(" million", "e6", x)      # Convert 'million' to 'e6'
+  x <- gsub(" billion", "e9", x)      # Convert 'billion' to 'e9'
+  x <- gsub(" trillion", "e12", x)      # Convert 'trillion' to 'e12'
+  
+  # Remove any commas and extra spaces
+  x <- gsub(",", "", x)  # Remove commas
+  
+  # Convert to numeric after handling the units
+  return(as.numeric(x))  # Convert the cleaned string to numeric
+}
+
+#clean columns for petroleum production
+wfb_df$Energy..Petroleum...total.petroleum.production = sapply(wfb_df$Energy..Petroleum...total.petroleum.production, clean_petroleum_column)
+
+#petroleum in barrels per day; convert to BTU
+#5.8e6 BTU per barrel of oil according to BP
+wfb_df$Energy..Petroleum...total.petroleum.production = wfb_df$Energy..Petroleum...total.petroleum.production * 365 * 5.8e6
+
+
+
+#make aggregate of total dirty production
+wfb_df <- wfb_df %>%
+  mutate(total_production = rowSums(select(., Energy..Coal...production, Energy..Natural.gas...production, Energy..Petroleum...total.petroleum.production), na.rm = TRUE))
+
+
+### GDP per capita
+
+#function to clean gdp columns
+clean_gdp_column <- function(x) {
+  # Remove dollar sign and commas
+  x <- gsub("^\\$", "", x)  # Remove the first dollar sign
+  x <- gsub(",", "", x)     # Remove the commas
+  
+  # Remove everything after the first numeric value (remove text like 'est.', etc.)
+  x <- gsub(" .*", "", x)   # Remove everything after the first number
+  
+  # Convert to numeric and return
+  return(as.numeric(x))  # Convert cleaned string to numeric
+}
+
+wfb_df$Economy..Real.GDP.per.capita = sapply(wfb_df$Economy..Real.GDP.per.capita, clean_gdp_column)
+
+
+
+# Consumption
+
+clean_consumption_column <- function(x) {
+  # Remove text like 'metric tons' and any parentheses content
+  x <- gsub(" Btu/person.*", "", x)  # Remove 'metric tons' and anything after it
+  x <- gsub("\\(.*\\)", "", x)         # Remove anything in parentheses like '(2022 est.)'
+  
+  # Convert 'million' to 1e6 and 'billion' to 1e9
+  x <- gsub(" million", "e6", x)      # Convert 'million' to 'e6'
+  x <- gsub(" billion", "e9", x)      # Convert 'billion' to 'e9'
+  x <- gsub(" trillion", "e12", x)      # Convert 'trillion' to 'e12'
+  
+  # Remove any commas and extra spaces
+  x <- gsub(",", "", x)  # Remove commas
+  
+  # Convert to numeric after handling the units
+  return(as.numeric(x))  # Convert the cleaned string to numeric
+}
+
+wfb_df$Energy..Energy.consumption.per.capita = sapply(wfb_df$Energy..Energy.consumption.per.capita, clean_consumption_column)
+
+
+### Population
+clean_population_column <- function(x) {
+  x <- gsub(",", "", x)     # Remove the commas
+
+  # Convert to numeric and return
+  return(as.numeric(x))  # Convert cleaned string to numeric
+}
+
+wfb_df$People.and.Society..Population...total = sapply(wfb_df$People.and.Society..Population...total, clean_population_column)
+
+
+
+### Production/Imports/Exports per capita
+
+wfb_df$Energy..Energy.production.per.capita =
+(wfb_df$total_production)/(wfb_df$People.and.Society..Population...total)
+
+
+wfb_df$Dirty_imports_percapita =
+(wfb_df$Energy..Coal...imports + wfb_df$Energy..Natural.gas...imports)/(wfb_df$People.and.Society..Population...total)
+
+wfb_df$Dirty_exports_percapita =
+(wfb_df$Energy..Coal...exports + wfb_df$Energy..Natural.gas...exports)/(wfb_df$People.and.Society..Population...total)
+
+
+
+### Continents
+
+wfb_df$Geography..Map.references[wfb_df$Geography..Map.references == "Arctic Region"] <- "Europe"
+wfb_df$Geography..Map.references[wfb_df$Geography..Map.references == "AsiaEurope"] <- "Europe"
+wfb_df$Geography..Map.references[wfb_df$Geography..Map.references == "Southeast Asia"] <- "Asia"
+wfb_df$Geography..Map.references[wfb_df$Geography..Map.references == "Central America and the Caribbean"] <- "South America"
+wfb_df$Geography..Map.references[wfb_df$Country == "France"] <- "Europe"
+
+wfb_df$Geography..Map.references[wfb_df$Country == "World"] <- "World"
+
+
+
+### Electricity/Clean Energy
+# Electricity generating capacity is KW
+# Clean energy sources are given as a percentage of the total electricity generating capacity
+# Electricity imports and exports are in kwh
+
+# Clean electricity capacity columns; Unit is KW; Signifies amount of energy that can be instantaneously produced at max capacity
+wfb_df <- wfb_df %>%
+  mutate(Energy..Electricity...installed.generating.capacity = case_when(
+    grepl("billion", Energy..Electricity...installed.generating.capacity, ignore.case = TRUE) ~
+      as.numeric(sub(" .*", "", Energy..Electricity...installed.generating.capacity)) * 1e9,
+    grepl("million", Energy..Electricity...installed.generating.capacity, ignore.case = TRUE) ~
+      as.numeric(sub(" .*", "", Energy..Electricity...installed.generating.capacity)) * 1e6,
+    TRUE ~ as.numeric(gsub(",", "", sub(" .*", "", Energy..Electricity...installed.generating.capacity)))
+  ))
+
+# Clean solar column
+wfb_df$Energy..Electricity.generation.sources...solar <- as.numeric(
+  sub("%.*", "", wfb_df$Energy..Electricity.generation.sources...solar)
+) / 100
+
+
+# Clean hydroelectricity column
+wfb_df$Energy..Electricity.generation.sources...hydroelectricity <- as.numeric(
+  sub("%.*", "", wfb_df$Energy..Electricity.generation.sources...hydroelectricity)
+) / 100
+
+# Clean biomass column
+wfb_df$Energy..Electricity.generation.sources...biomass.and.waste <- as.numeric(
+  sub("%.*", "", wfb_df$Energy..Electricity.generation.sources...biomass.and.waste)
+) / 100
+
+# Clean nuclear column
+wfb_df$Energy..Electricity.generation.sources...nuclear <- as.numeric(
+  sub("%.*", "", wfb_df$Energy..Electricity.generation.sources...nuclear)
+) / 100
+
+# Clean wind column
+wfb_df$Energy..Electricity.generation.sources...nuclear <- as.numeric(
+  sub("%.*", "", wfb_df$Energy..Electricity.generation.sources...nuclear)
+) / 100
+
+# Clean wind column
+wfb_df$Energy..Electricity.generation.sources...wind <- as.numeric(
+  sub("%.*", "", wfb_df$Energy..Electricity.generation.sources...wind)
+) / 100
+
+#Clean geothermal column
+wfb_df$Energy..Electricity.generation.sources...geothermal <- as.numeric(
+  sub("%.*", "", wfb_df$Energy..Electricity.generation.sources...geothermal)
+) / 100
+
+# Clean tide and wave column
+wfb_df$Energy..Electricity.generation.sources...tide.and.wave <- as.numeric(
+  sub("%.*", "", wfb_df$Energy..Electricity.generation.sources...tide.and.wave)
+) / 100
+
+
+
+#convert percentages of clean energy to capacity in KW
+wfb_df$Energy_solar = wfb_df$Energy..Electricity...installed.generating.capacity * 
+                      (wfb_df$Energy..Electricity.generation.sources...solar)
+
+wfb_df$Energy_hydro = wfb_df$Energy..Electricity...installed.generating.capacity * 
+                      (wfb_df$Energy..Electricity.generation.sources...hydroelectricity)
+
+wfb_df$Energy_biomass = wfb_df$Energy..Electricity...installed.generating.capacity * 
+                      (wfb_df$Energy..Electricity.generation.sources...biomass.and.waste)
+
+wfb_df$Energy_nuclear = wfb_df$Energy..Electricity...installed.generating.capacity * 
+                      (wfb_df$Energy..Electricity.generation.sources...nuclear)
+
+wfb_df$Energy_wind = wfb_df$Energy..Electricity...installed.generating.capacity * 
+                      (wfb_df$Energy..Electricity.generation.sources...wind)
+
+wfb_df$Energy_geothermal = wfb_df$Energy..Electricity...installed.generating.capacity * 
+                      (wfb_df$Energy..Electricity.generation.sources...geothermal)
+
+wfb_df$Energy_tide = wfb_df$Energy..Electricity...installed.generating.capacity * 
+                      (wfb_df$Energy..Electricity.generation.sources...tide.and.wave)
+
+
+#make column for total clean energy capacity in KW
+wfb_df$Total_clean_energy <- rowSums(wfb_df[, c(
+  "Energy_solar",
+  "Energy_hydro",
+  "Energy_biomass",
+  "Energy_nuclear",
+  "Energy_wind",
+  "Energy_geothermal",
+  "Energy_tide"
+)], na.rm = TRUE)
+
+
+#clean column Energy..Electricity...consumption; get rid of million, billions, ...
+#convert kwh to BTU; 1 kwh = 3412.142 BTU
+wfb_df <- wfb_df %>%
+  mutate(Energy..Electricity...consumption = case_when(
+    grepl("trillion", Energy..Electricity...consumption, ignore.case = TRUE) ~
+      as.numeric(sub(" .*", "", Energy..Electricity...consumption)) * 1e12,
+    grepl("billion", Energy..Electricity...consumption, ignore.case = TRUE) ~
+      as.numeric(sub(" .*", "", Energy..Electricity...consumption)) * 1e9,
+    grepl("million", Energy..Electricity...consumption, ignore.case = TRUE) ~
+      as.numeric(sub(" .*", "", Energy..Electricity...consumption)) * 1e6,
+    TRUE ~ as.numeric(gsub(",", "", sub(" .*", "", Energy..Electricity...consumption)))
+  ))
+
+#convert Electricity consumption to BTU
+wfb_df$Energy..Electricity...consumption = wfb_df$Energy..Electricity...consumption * 3412.142
+
+# make consumption and production per capita; not consumption is in BTU, production is generating capacity in KW
+wfb_df$Electricity_consumption_percapita = (wfb_df$Energy..Electricity...consumption)/(wfb_df$People.and.Society..Population...total)
+
+wfb_df$Clean_energy_production_percapita = 
+(wfb_df$Total_clean_energy)/(wfb_df$People.and.Society..Population...total)
+
+
+# Clean columns for Electricity imports and exports
+#imports
+wfb_df <- wfb_df %>%
+  mutate(Energy..Electricity...imports = case_when(
+    grepl("billion", Energy..Electricity...imports, ignore.case = TRUE) ~
+      as.numeric(sub(" .*", "", Energy..Electricity...imports)) * 1e9,
+    grepl("million", Energy..Electricity...imports, ignore.case = TRUE) ~
+      as.numeric(sub(" .*", "", Energy..Electricity...imports)) * 1e6,
+    TRUE ~ as.numeric(gsub(",", "", sub(" .*", "", Energy..Electricity...imports)))
+  ))
+
+#exports
+wfb_df <- wfb_df %>%
+  mutate(Energy..Electricity...exports = case_when(
+    grepl("billion", Energy..Electricity...exports, ignore.case = TRUE) ~
+      as.numeric(sub(" .*", "", Energy..Electricity...exports)) * 1e9,
+    grepl("million", Energy..Electricity...exports, ignore.case = TRUE) ~
+      as.numeric(sub(" .*", "", Energy..Electricity...exports)) * 1e6,
+    TRUE ~ as.numeric(gsub(",", "", sub(" .*", "", Energy..Electricity...exports)))
+  ))
+
+# make imports per capita
+wfb_df$Electricity_imports_percapita = 
+(wfb_df$Energy..Electricity...imports)/(wfb_df$People.and.Society..Population...total)
+#make exports per capits
+wfb_df$Electricity_exports_percapita = 
+(wfb_df$Energy..Electricity...exports)/(wfb_df$People.and.Society..Population...total)
+
+#convert kwh to BTU
+wfb_df$Electricity_imports_percapita_btu = wfb_df$Electricity_imports_percapita * 3412.142
+
+wfb_df$Electricity_exports_percapita_btu = wfb_df$Electricity_exports_percapita * 3412.142
+
+#make aggregates
+wfb_df$Total_energy_imports_percapita = wfb_df$Dirty_imports_percapita + wfb_df$Electricity_imports_percapita_btu
+
+wfb_df$Total_energy_exports_percapita = wfb_df$Dirty_exports_percapita + wfb_df$Electricity_exports_percapita_btu
+
+```
+
