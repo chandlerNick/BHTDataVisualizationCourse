@@ -93,6 +93,7 @@ cols_to_keep <- c("Geography..Map.references","Environment..Total.water.withdraw
 "Energy..Natural.gas...production",
 "Energy..Natural.gas...consumption",
 "Energy..Petroleum...total.petroleum.production",
+"Energy..Petroleum...refined.petroleum.consumption",
 "Economy..Average.household.expenditures...on.food",
 "Energy..Natural.gas...imports" )
 
@@ -100,7 +101,10 @@ trim_df <- full_df[,cols_to_keep]
 trim_df$Country <- full_df[,1]
 rownames(trim_df) <- full_df[,1]
 trim_df
+
+
 ```
+
 
 ```{r}
 library(stringr)
@@ -281,42 +285,19 @@ trim_df
 
 
 ```{r}
-data1 <- read.csv("../data/FAO_Dataset_2022.csv", stringsAsFactors = FALSE)
+data1 <- read.csv("../data/FAO_Dataset_19_23.csv", stringsAsFactors = FALSE)
+view(data1)
+```
 
-
-cols_to_keep <- c(
-  "Cereals._primary_Yield_kg.ha",
-  "Cereals._primary_Production_t",
-  "Eggs_Primary_Yield.Carcass_Weight_g.An",
-  "Eggs_Primary_Production_t",
-  "Fruit_Primary_Production_t",
-  "Fruit_Primary_Yield_kg.ha",
-  "Maize_.corn._Yield_kg.ha",
-  "Maize_.corn._Production_t",
-  "Milk._Total_Production_t",
-  "Milk._Total_Milk_Animals_An",
-  "Pulses._Total_Production_t",
-  "Pulses._Total_Yield_kg.ha",
-  "Sheep_and_Goats_Stocks_An",
-  "Sheep_and_Goat_Meat_Yield.Carcass_Weight_kg.An",
-  "Sugar_Crops_Primary_Yield_kg.ha",
-  "Sugar_Crops_Primary_Production_t",
-  "Agricultural_land_Share_in_Land_area_.",
-  "Agricultural_land_Value_of_agricultural_production_.Int._.._per_Area_USD_PPP.ha",
-  "Arable_land_Share_in_Agricultural_land_.",
-  "Land_area_equipped_for_irrigation_Share_in_Cropland_.",
-  "Permanent_crops_Share_in_Agricultural_land_.",
-  "Permanent_meadows_and_pastures_Share_in_Agricultural_land_.",
-  "NPK_fertilizers_Export_quantity_t",
-  "NPK_fertilizers_Import_quantity_t"
-)
-
+```{r}
+actual_cols = colnames(data1)
+actual_cols
 ```
 
 
+
 ```{r}
-# 1. Toutes les colonnes de ton DataFrame
-actual_cols <- colnames(data1)
+
 
 # 2. Les colonnes que tu veux garder
 cols_to_keep <- c(
@@ -344,7 +325,16 @@ cols_to_keep <- c(
   "Permanent_crops_Share_in_Agricultural_land_.",
   "Permanent_meadows_and_pastures_Share_in_Agricultural_land_.",
   "NPK_fertilizers_Export_quantity_t",
-  "NPK_fertilizers_Import_quantity_t"
+  "NPK_fertilizers_Import_quantity_t",
+  
+  "NPK_fertilizers_Agricultural_Use_t",
+  "PK_compounds_Agricultural_Use_t",
+  "Urea_Agricultural_Use_t",
+
+  "Herbicides_Agricultural_Use_t",
+  "Insecticides_._Biopesticides_Agricultural_Use_t",
+  
+  "Country_area_Area_1000_ha",                                                                                           "Cropland_Area_1000_ha"
 )
 
 # 3. Identifier celles qui manquent
@@ -355,6 +345,11 @@ print("Colonnes non trouvées dans data1 :")
 print(missing_cols)
 
 ```
+
+```{r}
+view(selected_df)
+```
+
 
 ```{r}
 selected_df <- data1[, cols_to_keep]
@@ -387,19 +382,33 @@ new_names <- c(
   "perm_crops_share_agri_pct",
   "perm_pasture_share_agri_pct",
   "npk_export_t",
-  "npk_import_t"
+  "npk_import_t",
+  
+  "npk_Agricultural_Use_t",
+  "pk_Agricultural_Use_t",
+  "Urea_Agricultural_Use_t",
+  
+
+  
+  "Herbicides_Agricultural_Use_t",
+  "Insecticides_Agricultural_Use_t",
+  "Country_area1000_ha",                                                                                                "Cropland_Area_1000_ha"
 )
 
 # Renommer
 colnames(selected_df) <- new_names
 
 data1 = selected_df
+data1$Area[222] <- "United States"
+data1$Area[216] <- "Turkey (Turkiye)"
+
+data1$Area[220] <- "United Kingdom"
 
 ```
 
 ```{r}
 trim_df$ID_Npm_Country <- rownames(trim_df)
-trim_df$ID_Npm_Country
+
 ```
 
 
@@ -408,33 +417,22 @@ merged_df <- merge(trim_df, data1,
                    by.x = "ID_Npm_Country",   # colonne dans trim_df
                    by.y = "Area",     # colonne correspondante dans data1
                    all.x = TRUE)              # merge à gauche (keep all trim_df rows)
-
+merged_df <- merged_df %>%
+  mutate(npk_agricultural_use_ha = npk_Agricultural_Use_t / (Cropland_Area_1000_ha * 1000))
 merged_df
 ```
-```{r}
-cols <- colnames(merged_df)
-cols
-```
-```{r}
-numeric_vars <- merged_df[, sapply(merged_df, is.numeric)]
-str(numeric_vars)
-complete_rows <- complete.cases(numeric_vars)
-sum(complete_rows) 
-```
+
+
+
+
+
+
+
+
+
+
 # overview
 
-```{r}
-library(corrplot)
-
-# Select numeric vars
-numeric_vars <- merged_df[sapply(merged_df, is.numeric)]
-
-# Correlation matrix
-cor_matrix <- cor(numeric_vars, use = "complete.obs")
-
-# Plot
-corrplot(cor_matrix, method = "color", tl.cex = 0.6)
-```
 
 
 ```{r}
@@ -460,25 +458,66 @@ library(FactoMineR)
 library(factoextra)
 library(janitor)
 
-# Nettoyage des noms
-df <- clean_names(merged_df)
-
 # Variables retenues
-vars_pca <- c(
-  "cereal_yield_kg_ha", "fruit_yield_kg_ha", "maize_yield_kg_ha",
-  "pulses_yield_kg_ha", "sugar_crop_yield_kg_ha", "eggs_yield_g_animal",
-  "sheep_goat_meat_yield_kg",
+Vars_Simple <- c(
+  "cereal_yield_kg_ha",  
+  "npk_import_t",
+  "npk_export_t",
+  "Natural.gas.imports.m3", 
+  "Coal.imports.tons", 
 
-  "npk_import_t", "npk_export_t",
-  "Natural.gas.imports.m3", "Coal.imports.tons", 
+  "Water.withdrawal.agricultural.m3",
+  "methane_emissions_Megatonne"
+)
+
+  
+vars_pca <- c(
+  "cereal_yield_kg_ha", 
+  "fruit_yield_kg_ha", 
+  "maize_yield_kg_ha",
+  "pulses_yield_kg_ha",
+  
+  #"sugar_crop_yield_kg_ha", 
+  #"eggs_yield_g_animal",
+  #"sheep_goat_meat_yield_kg",
+
+  #"npk_import_t", 
+  #"npk_export_t",
+  
+
+  "Coal.consumption.tons",
+  "petrol.consumption.bbl",
+  "Natural.gas.consumption.m3",
+
+  
+  
+  "npk_Agricultural_Use_t",
+  "npk_agricultural_use_ha",
+  #"pk_Agricultural_Use_t",
+  #"Urea_Agricultural_Use_t",
+  #"Herbicides_Agricultural_Use_t",
+  #"Insecticides_Agricultural_Use_t",
 
   "Water.withdrawal.agricultural.m3",
 
-  #"agri_land_share_total_land_pct", "arable_land_share_agri_pct",
- # "perm_crops_share_agri_pct", "perm_pasture_share_agri_pct",
-  #"irrigation_share_cropland_pct",
+  #"agri_land_share_total_land_pct", 
+  #"arable_land_share_agri_pct",
+  #"perm_crops_share_agri_pct", 
+  #"perm_pasture_share_agri_pct",
+  #"irrigation_share_cropland_pct"
 
-  "agri_prod_value_usdppp_per_ha"
+  #"agri_prod_value_usdppp_per_ha"
+  "Country_area1000_ha",                                                                                                "Cropland_Area_1000_ha",
+ 
+ # Production 
+ 
+  "cereal_prod_t",
+  "eggs_prod_t",
+  "fruit_prod_t",
+  "maize_prod_t",
+  "milk_prod_t",
+  "pulses_prod_t",
+  "sugar_crop_prod_t"
 )
 
 var_categories <- c(
@@ -493,35 +532,132 @@ var_categories <- c(
   "sheep_goat_meat_yield_kg" = "Yield",
 
   # Inputs: Fertilizer / Energy
+
+  
+  "Coal.consumption.tons"= "Energy",
+  "petrol.consumption.bbl"= "Energy",
+  "Natural.gas.consumption.m3"= "Energy",
   "npk_import_t" = "Fertilizer",
   "npk_export_t" = "Fertilizer",
-  "Natural.gas.imports.m3" = "Energy",
-  "Coal.imports.tons" = "Energy",
+  "npk_agricultural_use_ha"= "Fertilizer",
+  "npk_Agricultural_Use_t"= "Fertilizer",
+  "pk_Agricultural_Use_t"= "Fertilizer",
+  "Urea_Agricultural_Use_t"= "Fertilizer",
+  "Herbicides_Agricultural_Use_t"= "Fertilizer",
+  "Insecticides_Agricultural_Use_t"= "Fertilizer",
 
   # Water
   "Water.withdrawal.agricultural.m3" = "Water",
 
   # Agricultural structure (% land use, irrigation)
- # "agri_land_share_total_land_pct" = "Agri_%_Structure",
- # "arable_land_share_agri_pct" = "Agri_%_Structure",
- # "perm_crops_share_agri_pct" = "Agri_%_Structure",
- # "perm_pasture_share_agri_pct" = "Agri_%_Structure",
-  #"irrigation_share_cropland_pct" = "Agri_%_Structure",
+  "agri_land_share_total_land_pct" = "Agri_%_Structure",
+  "arable_land_share_agri_pct" = "Agri_%_Structure",
+  "perm_crops_share_agri_pct" = "Agri_%_Structure",
+  "perm_pasture_share_agri_pct" = "Agri_%_Structure",
+  "irrigation_share_cropland_pct" = "Agri_%_Structure",
 
   # Value
-  "agri_prod_value_usdppp_per_ha" = "Agri_Value"
+  "agri_prod_value_usdppp_per_ha" = "Agri_Value",
+  "Country_area1000_ha" = "Agri_Value",                                                                                 "Cropland_Area_1000_ha" = "Agri_Value",
+ 
+ # Production 
+  "cereal_prod_t"="Production",
+  "eggs_prod_t"="Production",
+  "fruit_prod_t"="Production",
+  "maize_prod_t"="Production",
+  "milk_prod_t"="Production",
+  "pulses_prod_t"="Production",
+  "sugar_crop_prod_t"="Production"
 )
 
-# 2. Préparation des données : suppression des NA et standardisation
+
+
+```
+
+```{r}
+# 1. Identifier les pays avec ≥ 1% de la production totale
+countries_above_threshold <- merged_df %>%
+  select(ID_Npm_Country, cereal_prod_t) %>%
+  filter(!is.na(cereal_prod_t)) %>%
+  group_by(ID_Npm_Country) %>%
+  summarise(total_prod = sum(cereal_prod_t, na.rm = TRUE)) %>%
+  mutate(perc = 100 * total_prod / sum(total_prod)) %>%
+  filter(perc >= 1) %>%
+  pull(ID_Npm_Country)
+
+# 2. Construire pca_data UNIQUEMENT avec ces pays
+filter_data <- merged_df %>%
+  filter(ID_Npm_Country %in% countries_above_threshold)
+
+
 pca_data <- merged_df %>%
   select(all_of(vars_pca), Continent, ID_Npm_Country) %>%
   drop_na()  # tu peux aussi faire imput si trop restrictif
 
+pca_data <- merged_df %>%
+  select(all_of(vars_pca), Continent, ID_Npm_Country) %>%
+  filter(rowMeans(is.na(.)) <= 0.2)
+
+
+
+library(missMDA)
+X_incomplete <- scale(pca_data %>% select(all_of(vars_pca)))
+
+
+# Imputation
+imputed <- imputePCA(X_incomplete, ncp = 2)  # ou plus de dimensions
+X <- imputed$completeObs
+
+
+# 3. Supprimer les colonnes constantes et standardiser
 # Standardiser les données (important pour la PCA)
-X <- scale(pca_data %>% select(all_of(vars_pca)))
 
 
 ```
+
+```{r}
+pca_data
+```
+
+
+
+
+
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(scales)
+
+# 1. Ajouter le rendement (par moyenne si plusieurs lignes par pays)
+yield_df <- merged_df %>%
+  select(ID_Npm_Country, cereal_yield_kg_ha) %>%
+  group_by(ID_Npm_Country) %>%
+  summarise(mean_yield = mean(cereal_yield_kg_ha, na.rm = TRUE))
+
+# 2. Rejoindre avec df_plot
+df_plot <- df_plot %>%
+  left_join(yield_df, by = "ID_Npm_Country")
+
+# 3. Barplot avec couleur = rendement
+ggplot(df_plot, aes(x = reorder(ID_Npm_Country, -perc), y = perc, fill = mean_yield)) +
+  geom_bar(stat = "identity") +
+  labs(
+    title = "Cereal production per country",
+    x = "Country",
+    y = "Production (%)",
+    fill = "Yield\nmean (kg/ha)"
+  ) +
+  scale_y_continuous(labels = percent_format(scale = 1)) +
+  scale_fill_viridis_c(option = "D", direction = -1) +  # ou scale_fill_gradient()
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1))
+
+```
+
+
+
 
 ```{r}
 res_pca <- prcomp(X, center = TRUE, scale. = TRUE)
@@ -539,6 +675,7 @@ fviz_eig(res_pca, addlabels = TRUE, ylim = c(0, 50)) +
 ```{r}
 fviz_pca_var(res_pca,
              col.var = var_categories[colnames(X)],
+             #col.var = "contrib",
              palette = "Set2",
              repel = TRUE) +
   theme_minimal()
@@ -549,16 +686,7 @@ fviz_pca_var(res_pca,
 fviz_contrib(res_pca, choice = "var", axes = 1, top = 15)
 fviz_contrib(res_pca, choice = "var", axes = 2, top = 15)
 ```
-```{r}
-# Contribution (%) des variables aux axes 1 et 2
-fviz_contrib(res_pca, choice = "var", axes = 1, top = 10) +
-  ggtitle("Top 10 Variable Contributions to PC1") +
-  theme_minimal()
 
-fviz_contrib(res_pca, choice = "var", axes = 2, top = 10) +
-  ggtitle("Top 10 Variable Contributions to PC2") +
-  theme_minimal()
-```
 
 ```{r}
 fviz_pca_var(res_pca,
@@ -580,15 +708,46 @@ fviz_pca_ind(res_pca,
   ggtitle("Individuals Factor Map (colored by Continent)") +
   theme_minimal()
 ```
+```{r}
+library(ggrepel)
+
+library(ggplot2)
+library(ggrepel)
+
+# Extraire les scores PCA
+ind_coords <- as.data.frame(res_pca$x[, 1:2])
+ind_coords$Country <- pca_data$ID_Npm_Country
+
+# Plot
+ggplot(ind_coords, aes(x = PC1, y = PC2, label = Country)) +
+  geom_point(color = "steelblue") +
+  geom_text_repel(size = 3, max.overlaps = 100) +
+  theme_minimal() +
+  ggtitle("Individuals Factor Map (labels instead of legend)")
+
+```
 
 ```{r}
-fviz_pca_ind(res_pca,
-             geom = "point",
-             col.ind = pca_data$Continent,  # facteur
-             palette = "jco",
-             addEllipses = TRUE,
-             legend.title = "Continent",
-             repel = TRUE) +
-  theme_minimal()
+fviz_pca_biplot(res_pca, 
+                label = "var", 
+                habillage = pca_data$Continent, 
+                palette = "jco",
+                addEllipses = TRUE, 
+                repel = TRUE, 
+                col.var = "steelblue")
+```
+
+```{r}
+library(corrplot)
+corr_data <- merged_df %>% select(all_of(vars_pca)) %>% cor(use = "complete.obs")
+corrplot(corr_data, method = "color", type = "upper", tl.col = "black", addCoef.col = "black")
+
+```
+
+
+```{r}
+library(randomForest)
+rf <- randomForest(cereal_yield_kg_ha ~ ., data = X, importance = TRUE)
+varImpPlot(rf)
 ```
 
