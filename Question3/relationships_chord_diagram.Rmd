@@ -7,18 +7,40 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Country Relationships Analysis
+# Country Relationships Analysis
 
-This document analyzes relationships between countries based on mentions in country background information.
+This document analyzes the relationships between the different countries present in our dataset.
 
-```{r load-libraries, message=FALSE, warning=FALSE}
+The first part of the analysis is based on mentions in each country's background information. Our dataset has a short description in natural language for each country, containing information about the country's history, politics, and other relevant information. This gives us a bit of context to the country, but is not in tabular format.
+
+To go from the description to a more structured format, we find mentions of other countries in the description of each country. For example, Argentina's background description text starts like this:
+
+> "In 1816, the United Provinces of the Río de la Plata declared their independence from Spain. After Bolivia, Paraguay, and Uruguay went their separate ways, the area that remained became Argentina. ..."
+
+Here, we find mentions of "Spain", "Bolivia", "Paraguay", and "Uruguay".
+
+For each country, we also define a list of alternative names, e.g., "United Kingdom" is also known as "Britain", "UK", "England", "British". In this way, we can search for the mentions of other countries in the description of each country, and store the relationships between countries in a matrix \(A = (a_{i,j})\), where:
+
+\[
+a_{i,j} =
+\begin{cases}
+1 & \text{if country $j$ mentions country $i$} \\
+0 & \text{otherwise}
+\end{cases}
+\]
+
+where \(n\) is the number of countries. This matrix is used for our subsequent analysis.
+
+
+
+```{r load-libraries, message=FALSE, warning=FALSE, echo=FALSE}
 # Load required packages
 library(readr)     # For reading CSV files
 library(circlize)  # For creating chord diagrams
 library(RColorBrewer)  # For color palettes
 ```
 
-```{r load-data}
+```{r load-data, echo=FALSE}
 # Load the CSV file
 countries_data <- read_csv("/home/luisa/Documents/University/BHT/Data Visualization/BHTDataVisualizationCourse/data/clean_data.csv", show_col_types = FALSE)
 
@@ -35,7 +57,7 @@ if ("World" %in% names(countries)) {
 }
 ```
 
-```{r define-relationships}
+```{r define-relationships, echo=FALSE}
 # Create a data structure to store country relationships
 country_relationships <- list()
 
@@ -80,7 +102,7 @@ country_alternatives <- list(
 )
 ```
 
-```{r find-relationships}
+```{r find-relationships, echo=FALSE}
 # For each country, find which other countries are mentioned in its background
 for (country_name in names(countries)) {
   country_background <- countries[[country_name]]$`Introduction..Background`
@@ -209,7 +231,7 @@ if ("Central America and the Caribbean" %in% rownames(continent_matrix)) {
 
 The following chord diagram visualizes the relationships between continents based on country mentions:
 
-```{r chord-diagram, fig.width=12, fig.height=12}
+```{r chord-diagram, echo=FALSE, message=FALSE, warning=FALSE, results='hide', fig.width=12, fig.height=12}
 # Create a more pleasant color palette for continents
 # Using a custom palette with darker, more saturated colors for better visibility
 continent_colors <- c(
@@ -260,18 +282,13 @@ circos.track(track.index = 1, panel.fun = function(x, y) {
 }, bg.border = NA)
 
 # Add title with larger font size
-title(main = "Relationships Between Continents", 
-      cex.main = 1.8,  # Increase title size
-      font.main = 2)   # Bold font
+title(main = "World Region Relationships",
+      cex.main = 1.8,
+      font.main = 2)
 ```
 
 ## Summary
 
-```{r summary}
-# Print a summary of the relationships
-cat("Total countries analyzed:", length(countries_list), "\n")
-cat("Countries with at least one relationship:", sum(has_relationships), "\n")
-cat("Countries in the final visualization:", nrow(final_matrix), "\n")
 ```
 
 This analysis shows how countries are interconnected based on mentions in their background information. The chord diagram visualizes these relationships at the continent level, highlighting how regions of the world relate to each other. 
