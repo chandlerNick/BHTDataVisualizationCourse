@@ -1,7 +1,5 @@
 ---
-title: "PaperReadyQuestion4"
-author: "Nick Chandler"
-date: "2025-07-09"
+title: "Question4"
 output:
   pdf_document: default
   html_document: default
@@ -150,22 +148,26 @@ colnames(trim_df)[colnames(trim_df) == "People.and.Society..Median.age...female"
 # People.and.Society..Median.age...male
 trim_df$People.and.Society..Median.age...male <- as.numeric( str_extract(trim_df$People.and.Society..Median.age...male, "^\\s*[0-9.]+"))
 colnames(trim_df)[colnames(trim_df) == "People.and.Society..Median.age...male"] <- "Median.age.male"
+
+trim_df$Continent[trim_df$Continent == "Central America and the Caribbean"] <- "Central America"
 ```
 
 
 # Introduction
 
-In this section we seek to answer the question: "How do selected demographic variables differ between males and females?". The variables we examine are: Population, Life Expectancy at Birth, Infant Mortality Rate, and Median Age. The techniques we use are Pairs Plots, Kernel Density Estimation + Rug Plots, PCA, and Choropleths.
+In this section we seek to answer the question: "How do selected demographic variables differ between males and females?"
+
+The variables we examine are: Population, Life Expectancy at Birth, Infant Mortality Rate, and Median Age. These are all measured for both males and females.
+
+The techniques we use are Pairs Plots, Kernel Density Estimation + Rug Plots, and Choropleths.
 
 # Correlation
 
-```{r, fig.height=8, fig.width=10}
+```{r, fig.height=6, fig.width=10}
 gendered_df <- trim_df[,c("Male.population", "Female.population", "Median.age.male", "Median.age.female", "Male.IMR.deaths.per.birth", "Female.IMR.deaths.per.birth", "Male.life.expectancy.at.birth", "Female.life.expectancy.at.birth")]
 
 par(mar = c(8,8,3,3))  # Modify margins to make the plot larger (top, left, bottom, right)
-colnames(gendered_df)
 colnames(gendered_df) <- c("Male.population", "Female.population", "Male.median.age", "Female.median.age", "Male IMR", "Female IMR", "M.Life.Expectancy", "F.Life.Expectancy")
-colnames(gendered_df)
 
 pairs(gendered_df,
       labels = colnames(gendered_df),
@@ -212,7 +214,7 @@ plot_two_kde_plots_on_same_axes <- function(x1, x2,
 par(mfrow=c(2,2))
 
 # Median Age
-plot_two_kde_plots_on_same_axes(trim_df$Median.age.female, trim_df$Median.age.male, "Female", "Male", "Median Age of Females and Males", "Median Age (years since birth)")
+plot_two_kde_plots_on_same_axes(trim_df$Median.age.female, trim_df$Median.age.male, "Female", "Male", "Median Age of Males and Females", "Median Age (years since birth)")
 
 # Infant Mortality Rate
 plot_two_kde_plots_on_same_axes(trim_df$Female.IMR.deaths.per.birth, trim_df$Male.IMR.deaths.per.birth, "Female", "Male", "Infant Mortality Ratio (IMR) of Males and Females", "IMR (Deaths per Birth)")
@@ -280,7 +282,7 @@ plot_grid(age, imr, life.expectancy, population, ncol = 2)
 
 These graphics allow comparison of per-continent aggregates so one may glean various insights such as the ordering which different continents follow.
 
-- **Top-Left:** One sees an ordering of average median ages by continent/region. Europe has the population with the highest median age while Africa has the population with the lowest median age. In each region except the Middle East, the median age of females is higher than that of males.
+- **Top-Left:** One sees an ordering of average median ages by continent/region. Europe has the population with the highest median age while Africa has the population with the lowest median age. In each region except the Middle East, the median age of females is higher than that of males. Note that the collected statistic was the median age and we took the average of these.
 
 - **Top-Right:** One sees an ordering of average infant mortality rate by continent/region. Africa has the highest infant mortality rate while Europe has the smallest. The ordering is the same for both males and females though males tend to have a higher infant mortality rate than females.
 
