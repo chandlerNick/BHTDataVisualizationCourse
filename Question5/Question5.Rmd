@@ -1,8 +1,11 @@
 ---
 title: "Question5"
 output:
-  pdf_document: default
-  html_document: default
+  pdf_document:
+    latex_engine: xelatex
+    keep_tex: yes
+  html_document:
+    df_print: paged
 date: "2025-06-18"
 ---
 
@@ -28,7 +31,6 @@ library(aplpack)
 library(leaflet)
 library(rnaturalearth)
 library(countrycode)
-library(GGally)
 library(FactoMineR)
 library(factoextra)
 library(janitor)
@@ -427,7 +429,14 @@ ggplot(merged_df, aes(x = petrol.consumption.per.HA, y = cereal_yield_kg_ha)) +
   ) +
   theme_minimal()
 ```
-```{r}
+
+
+This first plot suggests a potential positive correlation between petrol consumption per hectare and cereal yield. Additionally, countries with higher total cereal production (indicated by the size of the points) also tend to exhibit higher petrol usage and yield levels.
+We can also observe clusters by continent, suggesting similarities within the same continent.
+
+A plausible hypothesis emerging from this visualization is that countries with higher energy inputs may achieve more productive agricultural systems.
+
+```{r, echo = FALSE, warning=FALSE, message=FALSE}
 library(tidyverse)
 library(reshape2)  # pour melt
 
@@ -469,13 +478,18 @@ ggplot(df_long, aes(x = Continent, y = Value, fill = Variable)) +
 
 ```
 
+These box plots represent the distribution of cereal yields (in orange) and the distribution of water consumption (in blue) for all continents. These values have been normalized between 0 and 1 for comparison purposes.
+
+From an agronomic point of view, cereals are very water-intensive crops, and agriculture is one of the activities that exploits this resource the most. This graph seems to show a slight correlation between these two parameters. However, in Africa, the opposite situation can be observed.
+This graph seems to confirm agronomic knowledge by suggesting that a country's water consumption enables it to increase its cereal yields.
+
+However, we cannot rule out a confounding variable. For example, we can imagine that developed countries have a rich economy, partly produced by strong agriculture. These same countries have developed water supply systems for industry and residents.
 
 ```{r, echo= FALSE, warning=FALSE, message=FALSE}
 library(ggplot2)
 library(viridis)
-library(hrbrthemes)  # pour theme_ipsum
 library(corrplot)
-library( missMDA)
+library(missMDA)
 library(ggplot2)
 library(viridis)
 
@@ -494,9 +508,9 @@ ggplot(merged_df, aes(x = cereal_yield_kg_ha, fill = Continent)) +
 
 ```
 
+This graph also shows the distribution of cereal yields for each continent, but in a more detailed way by showing its distribution.
 
-
-
+It allows us to see significant differences in productivity between continents. Africa appears to be the least productive, while Europe and North America are the most productive. The study of modes allows us to observe continental within differences. For example, European yields do not show a clear mode, suggesting uniformity of production between European countries. In Southeast Asia, there appear to be three yield groups. For North America, consisting solely of Canada and the United States, these two modes are clearly observable.
 
 
 # Principal Component Analysis (PCA)
