@@ -1,17 +1,15 @@
 ---
-title: "Question5"
+title: "Question 3"
 output:
   pdf_document:
     latex_engine: xelatex
     keep_tex: yes
   html_document:
     df_print: paged
-date: "2025-06-18"
 ---
 
-# Can we identify global patterns in agricultural performance and energy-water usage among countries ? 
-
-
+# Introduction
+We focus our attention on the question, "Can we identify global patterns in agricultural performance and energy-water usage among countries ?" 
 
 
 ```{r,include=FALSE}
@@ -252,6 +250,8 @@ colnames(trim_df)[colnames(trim_df) == "People.and.Society..Physician.density"] 
 trim_df$Economy..Average.household.expenditures...on.food <- as.numeric(sub("%", "", str_extract(trim_df$Economy..Average.household.expenditures...on.food, "[0-9.]+%"))) / 100
 colnames(trim_df)[colnames(trim_df) == "Economy..Average.household.expenditures...on.food"] <- "household.expenditures.food.percent"
 
+#change Central America and the Caribbean to South Americs
+trim_df$Continent[trim_df$Continent == "Central America and the Caribbean"] <- "Central America"
 
 data1 <- read.csv("../data/FAO_Dataset_19_23.csv", stringsAsFactors = FALSE)
 
@@ -409,7 +409,7 @@ merged_df$Continent[51] <-  "Europe"
 
 
 
-# data exploration 
+# Data Exploration 
 
 
 
@@ -433,7 +433,6 @@ ggplot(merged_df, aes(x = petrol.consumption.per.HA, y = cereal_yield_kg_ha)) +
 
 This first plot suggests a potential positive correlation between petrol consumption per hectare and cereal yield. Additionally, countries with higher total cereal production (indicated by the size of the points) also tend to exhibit higher petrol usage and yield levels.
 We can also observe clusters by continent, suggesting similarities within the same continent.
-
 A plausible hypothesis emerging from this visualization is that countries with higher energy inputs may achieve more productive agricultural systems.
 
 ```{r, echo = FALSE, warning=FALSE, message=FALSE}
@@ -514,8 +513,7 @@ It allows us to see significant differences in productivity between continents. 
 
 
 # Principal Component Analysis (PCA)
-In this analysis, we performed a Principal Component Analysis (PCA) on a set of standardized (per hectare of arable land) agricultural, environmental, and input-related variables across countries. T
-he variables include several yield measures (e.g., cereal, maize, fruit, pulses, sugar crops), energy consumption per hectare (coal, petrol, natural gas), agricultural water withdrawal per hectare, fertilizer input (NPK, herbicides, insecticides), agricultural production value per hectare, and the share of irrigated cropland.
+In this analysis, we performed a Principal Component Analysis (PCA) on a set of standardized (per hectare of arable land) agricultural, environmental, and input-related variables across countries. The variables include several yield measures (e.g., cereal, maize, fruit, pulses, sugar crops), energy consumption per hectare (coal, petrol, natural gas), agricultural water withdrawal per hectare, fertilizer input (NPK, herbicides, insecticides), agricultural production value per hectare, and the share of irrigated cropland.
 
 These variables were grouped into thematic categories—Yield, Energy, Fertilizer, Water, Agricultural Structure, Value, and Production—to better understand the multidimensional structure of agricultural efficiency and resource use across countries.
 
@@ -660,13 +658,9 @@ fviz_pca_var(res_pca,
 ```
 
 This plot shows how each variable contributes to the two main principal components. The direction and length of each arrow represent the contribution and correlation of the variable with the components.
-
 Variables related to agricultural yields cluster in the bottom-left quadrant, suggesting they contribute strongly to Dimension 2. In contrast, variables associated with energy consumption (coal, petrol, gas) are mostly orthogonal to the yield variables and point toward the upper-left quadrant, indicating a strong contribution to Dimension 1. This suggests that yield and energy consumption are not strongly correlated in this dataset.
-
 Similarly, most input-related variables (insecticides, herbicides) align with energy variables, with the exception of NPK fertilizers, which point in the same direction as the yield variables. This may indicate that NPK use is more closely associated with crop productivity than other inputs.
-
 Interestingly, water consumption variables align with energy usage rather than with yields, suggesting that higher water withdrawal does not necessarily translate into higher agricultural performance at a global scale.
-
 The variable representing the average agricultural production value per hectare (USD PPP) points in an intermediate direction. A reasonable interpretation is that energy consumption is more reflective of general development level (e.g., high energy use in oil-exporting countries with low crop yields), rather than of agricultural performance. In contrast, countries with developed agricultural systems and access to irrigation might achieve both higher yield and higher value-added production per hectare. Hence, the average production value captures both productivity and the diversity of economically valuable crops.
 
 
@@ -683,6 +677,7 @@ fviz_pca_ind(res_pca,
   ggtitle("Individuals Factor Map (colored by Continent)") +
   theme_minimal()
 ```
+
 ### Bottom-left quadrant (−Dim1, −Dim2):
 Characterized by high agricultural yields, intensive NPK fertilizer use, and moderate to lower energy/water consumption.
 
@@ -698,35 +693,17 @@ Includes some countries from North America and Oceania.
 This could reflect input-heavy systems with lower overall efficiency or different agricultural priorities (e.g., livestock over crops).
 
 ### Right side of the map (+Dim1):
-Countries in this region exhibit lower energy and water use, though their yield or input profiles are more mixed.
-
-Several African and Asian countries cluster here.
-
-This may reflect less resource-intensive agriculture, either due to structural constraints or different development levels.
+Countries in this region exhibit lower energy and water use, though their yield or input profiles are more mixed. Several African and Asian countries cluster here. This may reflect less resource-intensive agriculture, either due to structural constraints or different development levels.
 
 ### Center of the map:
 Countries from Central America, the Middle East, and others are dispersed around the origin, indicating no strong association with either axis. These may represent diverse or transitional profiles, balancing input use and productivity.
 
 ### Agricultural Value per Hectare: A Crosscutting Variable
-The variable representing the average agricultural production value per hectare (USD PPP) appears to point in an intermediate direction—neither fully aligned with input intensity nor with yield exclusively. This suggests that:
+The variable representing the average agricultural production value per hectare (USD PPP) appears to point in an intermediate direction—neither fully aligned with input intensity nor with yield exclusively. This suggests that:  
 
-Value creation may result from a combination of yield and input optimization, rather than from raw input intensity alone.
-
-Countries with both moderate yields and access to water/energy infrastructure (e.g., some European nations) may achieve better economic valorization of their land.
+Value creation may result from a combination of yield and input optimization, rather than from raw input intensity alone.Countries with both moderate yields and access to water/energy infrastructure (e.g., some European nations) may achieve better economic valorization of their land.
 
 ### Caution and Final Remarks
-While the PCA helps differentiate agricultural input-output profiles, several caveats apply:
+While the PCA helps differentiate agricultural input-output profiles, several caveats apply:  
 
-Energy and water consumption do not directly correlate with higher performance globally; contextual factors (e.g., climate, technology, export orientation) likely moderate these effects.
-
-The overlap of countries from different continents indicates high internal heterogeneity, suggesting that development models and agricultural strategies vary widely within regions.
-
-Lastly, the PCA simplifies multidimensional relationships into two axes—so non-linearities or interaction effects may be obscured.
-
-
-
-
-
-
-
-
+Energy and water consumption do not directly correlate with higher performance globally; contextual factors (e.g., climate, technology, export orientation) likely moderate these effects.The overlap of countries from different continents indicates high internal heterogeneity, suggesting that development models and agricultural strategies vary widely within regions. Lastly, the PCA simplifies multidimensional relationships into two axes—so non-linearities or interaction effects may be obscured.
