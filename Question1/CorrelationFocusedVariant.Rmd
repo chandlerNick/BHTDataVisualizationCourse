@@ -1,7 +1,5 @@
 ---
 title: "Question 1"
-author: "Luisa Kalkert, Luke Richard, Nicholas Chandler"
-date: "`r Sys.Date()`"
 output:
   pdf_document: default
   html_document: default
@@ -29,7 +27,7 @@ library(corrplot)
 
 # Introduction
 
-In this section, we focus on the question: "How do selected human-geographic indicators relate to one another and how do different continents compare with respect to these indicators?".
+In this section, we focus on the question: "What do patterns in land use, demographics, and economics reveal about global inequality and regional development?"
 
 We examine the variables: Total Land, Arable Land, Real GDP per capita USD, Infant Mortality Rate, Life Expectancy at Birth, Death Rate, Birth Rate, Population Growth Rate, and Total Population.
 
@@ -129,12 +127,6 @@ trim_df$Continent[trim_df$Continent == "Central America and the Caribbean"] <- "
 # Note, you must re-run the whole notebook to not have issues with the nan overwriting
 ```
 
-
-The continents/regions we examine are:
-```{r}
-continents <- unlist(unique(trim_df$Continent))
-continents
-```
 
 
 ```{r}
@@ -334,8 +326,7 @@ In these boxplots, one can see that Africa tends to have smaller values for the 
 
 # Conclusion
 
-Through this analysis, we sought to answer the question: “How do selected human-geographic indicators relate to one another
-and how do different continents compare with respect to these indicators?” To do so, we examined linear and monotonic correlation between the variables themselves with Corrplots and continent/country-specific information, aggregated with PCA.
+Through this analysis, we sought to answer the question: "What do patterns in land use, demographics, and economics reveal about global inequality and regional development?" To do so, we examined linear and monotonic correlation between the variables themselves with Corrplots and continent/country-specific information, aggregated with PCA.
 
 The main takeaways are as follows: The variables we examined tend to cluster into a few groups such as "size" of countries, "wealth" of countries, and "poorness" of countries. There are only a few "large" countries in terms of land mass and population, namely India, China, Russia, and the United States. Based on the variables examined and our interpretation of the Principal Components, Africa tends to be less developed than the others. From this analysis and the geographic grouping seen in the anaylsis, one could speculate that the geographic location (among other factors such as colonialization) plays a large role in the developedness of nations.
 
