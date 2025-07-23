@@ -1,0 +1,1458 @@
+---
+title: "Question 1"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+# Question 1: How is the world connected?
+
+This question analyzes the relationships between the different countries and world regions in our dataset. We use two main indicators to look at these relationships:
+1. Mentions of other countries in each country's background information.
+2. Imports and exports of each country.
+
+## 1.1 Relations from the Countries' Introduction Background
+
+The first part of the analysis is based on mentions in each country's background information. Our dataset has a short description in natural language for each country, containing information about the country's history, politics, and other relevant information. This gives us a bit of context to the country, but is not in tabular format.
+
+To go from the description to a more structured format, we find mentions of other countries in the description of each country. For example, Argentina's background description text starts like this:
+
+> "In 1816, the United Provinces of the Río de la Plata declared their independence from Spain. After Bolivia, Paraguay, and Uruguay went their separate ways, the area that remained became Argentina. ..."
+
+Here, we find mentions of "Spain", "Bolivia", "Paraguay", and "Uruguay".
+
+For each country, we also define a list of alternative names, e.g., "United Kingdom" is also known as "Britain", "UK", "England", "British". In this way, we can search for the mentions of other countries in the description of each country, and store the relationships between countries in a matrix \(A = (a_{i,j})\), where:
+
+\[
+a_{i,j} =
+\begin{cases}
+1 & \text{if country $j$ mentions country $i$} \\
+0 & \text{otherwise}
+\end{cases}
+\]
+
+where \(n\) is the number of countries. This matrix is used for our subsequent analysis.
+
+### 1.1.1 Chord Diagram of World Region Relationships
+
+First of, we start with a high-level view of the relationships between different world regions. 
+To do this, we create a chord diagram to visualize the relationships between the different regions using the circlize package.
+When a country is mentioned in the background information of another country we'll add (or increase the thickness of) an arrow from the region of the first country to the region of the second country.
+E.g. if the background information of Argentina mentions Spain, we'll add an arrow from South America to Europe. If Argentina mentions Paraguay, we'll add an arrow from South America back to South America.
+
+```{r chord-diagram, echo=FALSE, message=FALSE, warning=FALSE, results='hide', fig.height=8, fig.align='center'}
+# Load required packages
+library(readr)     # For reading CSV files
+library(circlize)  # For creating chord diagrams
+library(RColorBrewer)  # For color palettes
+
+# Load the CSV file
+countries_data <- read_csv("/home/luisa/Documents/University/BHT/Data Visualization/BHTDataVisualizationCourse/data/clean_data.csv", show_col_types = FALSE)
+
+# Convert the CSV data to a more usable format
+countries <- list()
+for (i in 1:nrow(countries_data)) {
+  country_name <- countries_data$Country[i]
+  countries[[country_name]] <- as.list(countries_data[i, -1])  # Exclude the country column
+}
+
+# Remove "World" from the list of countries if it exists
+if ("World" %in% names(countries)) {
+  countries <- countries[names(countries) != "World"]
+}
+
+# Define alternative names for certain countries
+country_alternatives <- list(
+  "United Kingdom" = c("Britain", "UK", "England", "British"),
+  "United States" = c("USA", "US"),
+  "China" = c("PRC", "Chinese", "Chin"),
+  "Turkey (Turkiye)" = c("Turkiye", "Turkey", "Turkish"),
+  "Congo, Democratic Republic of the" = c("DRC", "DR Congo", "Congo-Kinshasa", "Congo republics"),
+  "Congo, Republic of the" = c("Congo-Brazzaville", "Congo republics"),
+  "Czechia" = c("Czech Republic", "Czech"),
+  "Eswatini" = c("Swaziland", "Swazee"),
+  "Burma" = c("Myanmar", "Burmese"),
+  "Holy See (Vatican City)" = c("Vatican", "Vatican City"),
+  "Micronesia, Federated States of" = c("FSM", "Micronesia"),
+  "Gambia, The" = c("The Gambia", "Gambia"),
+  "Bahamas, The" = c("The Bahamas", "Bahamas"),
+  "Korea, North" = c("North Korea", "DPRK", "N. Korea"),
+  "Korea, South" = c("South Korea", "ROK", "S. Korea"),
+  "Timor-Leste" = c("East Timor"),
+  "Taiwan" = c("Republic of China", "ROC"),
+  "Vietnam" = c("Viet Nam"),
+  "Germany" = c("German"),
+  "France" = c("French"),
+  "Italy" = c("Italian"),
+  "Spain" = c("Spanish"),
+  "Portugal" = c("Portuguese"),
+  "Greece" = c("Greek"),
+  "Netherlands" = c("Dutch"),
+  "Belgium" = c("Belgian"),
+  "Sweden" = c("Swedish"),
+  "Norway" = c("Norwegian"),
+  "Denmark" = c("Danish"),
+  "Switzerland" = c("Swiss"),
+  "Poland" = c("Polish"),
+  "Hungary" = c("Hungarian"),
+  "Finland" = c("Finnish"),
+  "United Arab Emirates" = c("UAE", "Emirates"),
+  "New Zealand" = c("NZ"),
+  "Trinidad and Tobago" = c("Trinidad & Tobago")
+)
+
+# Create a data structure to store country relationships
+country_relationships <- list()
+
+# For each country, find which other countries are mentioned in its background
+for (country_name in names(countries)) {
+  country_background <- countries[[country_name]]$`Introduction..Background`
+  related_countries <- c()
+  
+  if (!is.null(country_background) && !is.na(country_background)) {
+    # Check for mentions of each other country
+    for (other_country in names(countries)) {
+      # Skip self-references
+      if (other_country != country_name) {
+        # Check if the other country name appears in the background
+        if (grepl(other_country, country_background, ignore.case = TRUE)) {
+          related_countries <- c(related_countries, other_country)
+        } else {
+          # Check alternative names if they exist for this country
+          if (other_country %in% names(country_alternatives)) {
+            for (alt_name in country_alternatives[[other_country]]) {
+              if (grepl(alt_name, country_background, ignore.case = TRUE)) {
+                related_countries <- c(related_countries, other_country)
+                break  # Found a match, no need to check other alternatives
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  # Store the relationships for this country
+  country_relationships[[country_name]] <- related_countries
+}
+
+# Convert the relationships to a matrix format for the chord diagram
+countries_list <- unique(names(country_relationships))
+n_countries <- length(countries_list)
+
+# Get continent information for each country
+country_continents <- sapply(countries_list, function(country) {
+  continent <- countries[[country]]$`Geography..Map.references`
+  if(is.null(continent) || is.na(continent)) {
+    return("Unknown")
+  } else {
+    return(continent)
+  }
+})
+
+# Create an empty matrix
+relationship_matrix <- matrix(0, nrow = n_countries, ncol = n_countries)
+rownames(relationship_matrix) <- countries_list
+colnames(relationship_matrix) <- countries_list
+
+# Fill the matrix with relationship data
+for (i in 1:n_countries) {
+  country_name <- countries_list[i]
+  related_countries <- country_relationships[[country_name]]
+  
+  for (related in related_countries) {
+    if (related %in% countries_list) {
+      j <- which(countries_list == related)
+      relationship_matrix[i, j] <- relationship_matrix[i, j] + 1
+    }
+  }
+}
+
+# Filter to include only countries with at least one relationship
+has_relationships <- rowSums(relationship_matrix) > 0 | colSums(relationship_matrix) > 0
+filtered_matrix <- relationship_matrix[has_relationships, has_relationships]
+filtered_continents <- country_continents[has_relationships]
+
+# Remove Arctic Region from the network visualization
+arctic_mask <- filtered_continents != "Arctic Region"
+filtered_matrix <- filtered_matrix[arctic_mask, arctic_mask]
+filtered_countries <- countries_list[arctic_mask]
+filtered_continents <- filtered_continents[arctic_mask]
+
+# Create a more manageable matrix by keeping only countries with multiple relationships
+relationship_threshold <- 2
+significant_relationships <- rowSums(filtered_matrix) >= relationship_threshold | 
+                            colSums(filtered_matrix) >= relationship_threshold
+final_matrix <- filtered_matrix[significant_relationships, significant_relationships]
+final_continents <- filtered_continents[significant_relationships]
+
+# Sort countries by continent
+continent_order <- order(final_continents)
+final_matrix <- final_matrix[continent_order, continent_order]
+final_continents <- final_continents[continent_order]
+
+# Group countries by continent
+unique_continents <- unique(final_continents)
+continent_countries <- lapply(unique_continents, function(cont) {
+  rownames(final_matrix)[final_continents == cont]
+})
+names(continent_countries) <- unique_continents
+
+# Create a continent-level matrix
+continent_matrix <- matrix(0, nrow = length(unique_continents), ncol = length(unique_continents))
+rownames(continent_matrix) <- unique_continents
+colnames(continent_matrix) <- unique_continents
+
+# Fill the continent matrix with aggregated relationship data
+for (i in 1:nrow(final_matrix)) {
+  for (j in 1:ncol(final_matrix)) {
+    if (final_matrix[i, j] > 0) {
+      source_continent <- final_continents[i]
+      target_continent <- final_continents[j]
+      continent_matrix[source_continent, target_continent] <- 
+        continent_matrix[source_continent, target_continent] + final_matrix[i, j]
+    }
+  }
+}
+
+# Rename "Central America and the Caribbean" to "Central America" in the data
+final_continents[final_continents == "Central America and the Caribbean"] <- "Central America"
+unique_continents <- unique(final_continents)
+
+# Update continent_countries list with the new name
+if ("Central America and the Caribbean" %in% names(continent_countries)) {
+  continent_countries[["Central America"]] <- continent_countries[["Central America and the Caribbean"]]
+  continent_countries[["Central America and the Caribbean"]] <- NULL
+}
+
+# Update continent_matrix with the new name
+if ("Central America and the Caribbean" %in% rownames(continent_matrix)) {
+  rownames(continent_matrix)[rownames(continent_matrix) == "Central America and the Caribbean"] <- "Central America"
+  colnames(continent_matrix)[colnames(continent_matrix) == "Central America and the Caribbean"] <- "Central America"
+}
+
+# Create a more pleasant color palette for continents
+continent_colors <- c(
+  "Africa" = "#0D47A1",       # Darker Blue
+  "Asia" = "#B71C1C",         # Darker Red
+  "Central America" = "#E65100", # Darker Orange
+  "Europe" = "#33691E",       # Darker Green
+  "Middle East" = "#D84315",  # Darker Deep Orange
+  "North America" = "#4527A0", # Darker Purple
+  "Oceania" = "#00695C",      # Darker Teal
+  "South America" = "#FF8F00", # Darker Amber
+  "Southeast Asia" = "#AD1457", # Darker Pink
+  "AsiaEurope" = "#4E342E"    # Darker Brown
+)
+
+# Create the chord diagram for continents
+par(mar = c(1, 1, 3, 1))
+chordDiagram(
+  continent_matrix,
+  grid.col = continent_colors,
+  transparency = 0.1,  
+  directional = TRUE,
+  direction.type = "arrows",
+  link.arr.type = "big.arrow",
+  link.sort = TRUE,
+  link.largest.ontop = TRUE,
+  annotationTrack = "grid",
+  preAllocateTracks = list(track.height = 0.1),
+  annotationTrackHeight = c(0.05, 0.1),
+  grid.border = "black"  # Add thin black borders around sectors
+)
+
+# Add labels for continents
+circos.track(track.index = 1, panel.fun = function(x, y) {
+  sector.index = get.cell.meta.data("sector.index")
+  xlim = get.cell.meta.data("xlim")
+  ylim = get.cell.meta.data("ylim")
+  
+  circos.text(
+    mean(xlim), ylim[1], 
+    sector.index, 
+    facing = "clockwise",
+    niceFacing = TRUE, 
+    adj = c(0, 0.5),
+    cex = 0.5
+  )
+}, bg.border = NA)
+
+# Add title with larger font size
+title(main = "World Region Relationships Chord Diagram",
+      cex.main = 1,
+      font.main = 2)
+```
+
+As we can see, not all regions are connected to each other in the same way. For example, North America has many incoming connections, but only a few outgoing connections. This means many countries mention Nort American Countries in their background information, but not the other way around.
+Also we can see that there are some regions wich are relevant to many other regions, e.g. Europe, Asia, North America and to a lesser extent Southeast Asia. This might be due to the colonial past of many european countries, as well as current trade relations.
+At the same time, there are other regions that are only relevant to a few other regions, e.g. Oceania, Africa, South and Central America as well as the Middle East. Especially for Africa you can clearly see that african countries mention countries from many other regions but the is not mentioned the other way around.
+Africa is a continent that has been influenced or colonized by many other regions, but is yet to play a significant role internationally.
+
+### 1.1.2 Country Relationships Barplot
+
+
+```{r packages}
+# Load required packages
+library(readr)  # For reading CSV files
+library(ggplot2)  # For creating plots
+library(dplyr)  # For data manipulation
+library(tidyr)  # For data reshaping
+```
+
+
+```{r data_preprocessing, include=FALSE}
+# Load required packages
+library(readr)
+library(dplyr)
+library(stringr)
+
+# Load the CSV file
+countries_data <- read_csv("/home/luisa/Documents/University/BHT/Data Visualization/BHTDataVisualizationCourse/data/clean_data.csv", show_col_types = FALSE)
+
+# Convert the CSV data to a more usable format
+countries <- list()
+for (i in 1:nrow(countries_data)) {
+  country_name <- countries_data$Country[i]
+  countries[[country_name]] <- as.list(countries_data[i, -1])  # Exclude the country column
+}
+
+# Remove "World" from the list of countries if it exists
+if ("World" %in% names(countries)) {
+  countries <- countries[names(countries) != "World"]
+}
+
+# Define alternative names for certain countries (union of all versions)
+country_alternatives <- list(
+  "United Kingdom" = c("Britain", "UK", "England", "British"),
+  "United States" = c("USA", "US"),
+  "China" = c("PRC", "Chinese", "Chin"),
+  "Turkey (Turkiye)" = c("Turkiye", "Turkey", "Turkish"),
+  "Congo, Democratic Republic of the" = c("DRC", "DR Congo", "Congo-Kinshasa", "Congo republics"),
+  "Congo, Republic of the" = c("Congo-Brazzaville", "Congo republics"),
+  "Czechia" = c("Czech Republic", "Czech"),
+  "Eswatini" = c("Swaziland", "Swazee"),
+  "Burma" = c("Myanmar", "Burmese"),
+  "Holy See (Vatican City)" = c("Vatican", "Vatican City"),
+  "Micronesia, Federated States of" = c("FSM", "Micronesia"),
+  "Gambia, The" = c("The Gambia", "Gambia"),
+  "Bahamas, The" = c("The Bahamas", "Bahamas"),
+  "Korea, North" = c("North Korea", "DPRK", "N. Korea"),
+  "Korea, South" = c("South Korea", "ROK", "S. Korea"),
+  "Timor-Leste" = c("East Timor"),
+  "Taiwan" = c("Republic of China", "ROC"),
+  "Vietnam" = c("Viet Nam"),
+  "Germany" = c("German"),
+  "France" = c("French"),
+  "Italy" = c("Italian"),
+  "Spain" = c("Spanish"),
+  "Portugal" = c("Portuguese"),
+  "Greece" = c("Greek"),
+  "Netherlands" = c("Dutch"),
+  "Belgium" = c("Belgian"),
+  "Sweden" = c("Swedish"),
+  "Norway" = c("Norwegian"),
+  "Denmark" = c("Danish"),
+  "Switzerland" = c("Swiss"),
+  "Poland" = c("Polish"),
+  "Hungary" = c("Hungarian"),
+  "Finland" = c("Finnish"),
+  "United Arab Emirates" = c("UAE", "Emirates"),
+  "New Zealand" = c("NZ"),
+  "Trinidad and Tobago" = c("Trinidad & Tobago")
+)
+
+# Create a data structure to store country relationships
+country_relationships <- list()
+for (country_name in names(countries)) {
+  country_background <- countries[[country_name]]$`Introduction..Background`
+  related_countries <- c()
+  if (!is.null(country_background) && !is.na(country_background)) {
+    for (other_country in names(countries)) {
+      if (other_country != country_name) {
+        if (grepl(other_country, country_background, ignore.case = TRUE)) {
+          related_countries <- c(related_countries, other_country)
+        } else if (other_country %in% names(country_alternatives)) {
+          for (alt_name in country_alternatives[[other_country]]) {
+            if (grepl(alt_name, country_background, ignore.case = TRUE)) {
+              related_countries <- c(related_countries, other_country)
+              break
+            }
+          }
+        }
+      }
+    }
+  }
+  country_relationships[[country_name]] <- related_countries
+}
+```
+
+
+```{r calculate_metrics}
+# Calculate relationships OUT for each country
+relationships_out <- sapply(names(country_relationships), function(country) {
+  length(country_relationships[[country]])
+})
+
+# Calculate relationships IN for each country
+relationships_in <- sapply(names(countries), function(target_country) {
+  count <- 0
+  for (country_name in names(country_relationships)) {
+    if (target_country %in% country_relationships[[country_name]]) {
+      count <- count + 1
+    }
+  }
+  return(count)
+})
+
+# Ensure both vectors have the same names
+names(relationships_in) <- names(countries)
+
+# Create a data frame for plotting
+relationship_data <- data.frame(
+  Country = names(countries),
+  Relationships_In = relationships_in,
+  Relationships_Out = relationships_out[names(countries)],
+  stringsAsFactors = FALSE
+)
+
+# Replace NA values with 0
+relationship_data$Relationships_Out[is.na(relationship_data$Relationships_Out)] <- 0
+
+# Filter and sort data
+relationship_data <- relationship_data[
+  relationship_data$Relationships_In > 0 | relationship_data$Relationships_Out > 0, 
+]
+relationship_data$Total_Relationships <- relationship_data$Relationships_In + relationship_data$Relationships_Out
+relationship_data <- relationship_data[order(-relationship_data$Total_Relationships), ]
+```
+
+
+```{r plot_relationships, fig.width=20, fig.height=8}
+# Take top 30 countries for better visibility
+top_countries <- head(relationship_data, 20)
+
+# Reshape data for side-by-side bar plot
+plot_data <- top_countries %>%
+  select(Country, Relationships_In, Relationships_Out) %>%
+  pivot_longer(cols = c(Relationships_In, Relationships_Out), 
+               names_to = "Direction", 
+               values_to = "Count")
+
+# Clean up direction labels
+plot_data$Direction <- ifelse(plot_data$Direction == "Relationships_In", 
+                             "Mentioned by Others", 
+                             "Mentions Others")
+
+# Shorten country names for better display
+plot_data$Country_Short <- plot_data$Country
+plot_data$Country_Short[plot_data$Country_Short == "United States"] <- "USA"
+plot_data$Country_Short[plot_data$Country_Short == "United Kingdom"] <- "UK"
+plot_data$Country_Short[plot_data$Country_Short == "Korea, South"] <- "South Korea"
+plot_data$Country_Short[plot_data$Country_Short == "Korea, North"] <- "North Korea"
+plot_data$Country_Short[plot_data$Country_Short == "Turkey (Turkiye)"] <- "Turkey"
+plot_data$Country_Short[plot_data$Country_Short == "Micronesia, Federated States of"] <- "Micronesia"
+
+
+# Create the bar plot
+p <- ggplot(plot_data, aes(x = reorder(Country_Short, -Count), y = Count, fill = Direction)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.9) +
+  scale_fill_manual(values = c("Mentioned by Others" = "#2E7D32", "Mentions Others" = "#1976D2")) +
+  labs(
+    title = "Country Relationships: Incoming vs Outgoing Mentions",
+    subtitle = "Top 20 countries by total relationship count",
+    x = "Country",
+    y = "Number of Relationships",
+    fill = "Relationship Type"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 14),
+    axis.text.y = element_text(size = 14),
+    axis.title.x = element_text(size = 16, face = "bold"),
+    axis.title.y = element_text(size = 16, face = "bold"),
+    plot.title = element_text(size = 20, face = "bold"),
+    plot.subtitle = element_text(size = 16),
+    legend.position = "top",
+    legend.text = element_text(size = 14),
+    legend.title = element_text(size = 15, face = "bold"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    plot.margin = margin(20, 20, 20, 20)
+  )
+
+# Display the plot
+print(p)
+```
+
+Here, we can see that the notion from the chord diagram is confirmed. The US is mentioned in the background information of 184 other countries, so almost every country in the world. It is still open, whether this is due to the US's influence on the world or due to the fact that the data set is created by an US agency.
+With the past of the british empire spanning over the globe, it is not surprising to see the UK in second place.
+Taiwan as a relatively small country ranking #3 was initially surprising, but might be due to its central role in regional border disputes, global semiconductor trade, and geopolitical tensions with China.
+
+
+
+```{r plot_total_relationships, fig.width=20, fig.height=8}
+# Bar plot of 'mentioned by others' (Relationships_In) for all countries, no x labels
+all_countries_data <- relationship_data
+
+# Order by Relationships_In descending
+all_countries_data <- all_countries_data[order(-all_countries_data$Relationships_In), ]
+
+# Add a numeric index for x axis
+all_countries_data$Index <- seq_len(nrow(all_countries_data))
+
+# Plot: x = Index (country, no label), y = Relationships_In
+p2 <- ggplot(all_countries_data, aes(x = Index, y = Relationships_In)) +
+  geom_bar(stat = "identity", fill = "#1976D2", width = 0.8) +
+  labs(
+    title = "Countries Mentioned by Others (Incoming Mentions) for All Countries",
+    subtitle = "Countries ordered by incoming mentions; x-axis: country index (no labels)",
+    x = "Country (ordered by incoming mentions)",
+    y = "Number of Incoming Mentions"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.title.x = element_text(size = 16, face = "bold"),
+    axis.title.y = element_text(size = 16, face = "bold"),
+    plot.title = element_text(size = 20, face = "bold"),
+    plot.subtitle = element_text(size = 16),
+    plot.margin = margin(20, 20, 20, 20)
+  )
+
+print(p2)
+```
+
+Now we are looking at the incoming mentions (how many other countries mention a country in their introduction text) for all the countries. We can see that there are two countries that are mentioned by many other countries (The US and the UK again).
+We have about 15 countries that have a still high number of mentions, which suggests these countries are highly important on the international stage.
+We then see a long tail for the rest of the countries, roughly folowing a zipfian distribution, wich suggest these countries have only a minor interational relevance. 
+More than half of the countries world wide are mentioned once or even not at all in the introduction text of another country.
+
+
+
+
+```{r libraries, echo=FALSE}
+library(readr)      # For reading CSV files
+library(RColorBrewer)  # For color palettes
+library(igraph)     # For network visualization
+```
+
+```{r data_loading_again,echo=FALSE} 
+# Load the CSV file
+countries_data <- read_csv("/home/luisa/Documents/University/BHT/Data Visualization/BHTDataVisualizationCourse/data/clean_data.csv")
+
+# Convert the CSV data to a more usable format
+countries <- list()
+for (i in 1:nrow(countries_data)) {
+  country_name <- countries_data$Country[i]
+  countries[[country_name]] <- as.list(countries_data[i, -1])  # Exclude the country column
+}
+
+# Remove "World" from the list of countries if it exists
+if ("World" %in% names(countries)) {
+  countries <- countries[names(countries) != "World"]
+}
+```
+
+```{r define_relationships, echo=FALSE}
+# Create a data structure to store country relationships
+country_relationships <- list()
+
+# Define alternative names for certain countries
+country_alternatives <- list(
+  "United Kingdom" = c("Britain", "UK", "England", "British"),
+  "United States" = c("USA", "US"),
+  "China" = c("PRC", "Chinese", "Chin"),
+  "Turkey (Turkiye)" = c("Turkiye", "Turkey", "Turkish"),
+  "Congo, Democratic Republic of the" = c("DRC", "DR Congo", "Congo-Kinshasa", "Congo republics"),
+  "Congo, Republic of the" = c("Congo-Brazzaville", "Congo republics"),
+  "Czechia" = c("Czech Republic", "Czech"),
+  "Eswatini" = c("Swaziland", "Swazee"),
+  "Burma" = c("Myanmar", "Burmese"),
+  "Holy See (Vatican City)" = c("Vatican", "Vatican City"),
+  "Micronesia, Federated States of" = c("FSM", "Micronesia"),
+  "Gambia, The" = c("The Gambia", "Gambia"),
+  "Bahamas, The" = c("The Bahamas", "Bahamas"),
+  "Korea, North" = c("North Korea", "DPRK"),
+  "Korea, South" = c("South Korea", "ROK"),
+  "Timor-Leste" = c("East Timor"),
+  "Taiwan" = c("Republic of China", "ROC"),
+  "Vietnam" = c("Viet Nam"),
+  "Germany" = c("German"),
+  "France" = c("French"),
+  "Italy" = c("Italian"),
+  "Spain" = c("Spanish"),
+  "Portugal" = c("Portuguese"),
+  "Greece" = c("Greek"),
+  "Netherlands" = c("Dutch"),
+  "Belgium" = c("Belgian"),
+  "Sweden" = c("Swedish"),
+  "Norway" = c("Norwegian"),
+  "Denmark" = c("Danish"),
+  "Finland" = c("Finnish"),
+  "Switzerland" = c("Swiss"),
+  "Poland" = c("Polish"),
+  "Hungary" = c("Hungarian")
+)
+
+# For each country, find which other countries are mentioned in its background
+for (country_name in names(countries)) {
+  country_background <- countries[[country_name]]$`Introduction..Background`
+  related_countries <- c()
+  
+  if (!is.null(country_background) && !is.na(country_background)) {
+    # Check for mentions of each other country
+    for (other_country in names(countries)) {
+      # Skip self-references
+      if (other_country != country_name) {
+        # Check if the other country name appears in the background
+        if (grepl(other_country, country_background, ignore.case = TRUE)) {
+          related_countries <- c(related_countries, other_country)
+        } else {
+          # Check alternative names if they exist for this country
+          if (other_country %in% names(country_alternatives)) {
+            for (alt_name in country_alternatives[[other_country]]) {
+              if (grepl(alt_name, country_background, ignore.case = TRUE)) {
+                related_countries <- c(related_countries, other_country)
+                break  # Found a match, no need to check other alternatives
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  # Store the relationships for this country
+  country_relationships[[country_name]] <- related_countries
+}
+```
+
+```{r create_matrix, echo=FALSE}
+# Convert the relationships to a matrix format
+countries_list <- unique(names(country_relationships))
+n_countries <- length(countries_list)
+
+# Get continent information for each country
+country_continents <- sapply(countries_list, function(country) {
+  continent <- countries[[country]]$`Geography..Map.references`
+  if(is.null(continent) || is.na(continent)) {
+    return("Unknown")
+  } else {
+    # Standardize continent names
+    if(continent == "Central America and the Caribbean") {
+      return("Central America")
+    } else {
+      return(continent)
+    }
+  }
+})
+
+# Create and fill the relationship matrix
+relationship_matrix <- matrix(0, nrow = n_countries, ncol = n_countries)
+rownames(relationship_matrix) <- countries_list
+colnames(relationship_matrix) <- countries_list
+
+for (i in 1:n_countries) {
+  country_name <- countries_list[i]
+  related_countries <- country_relationships[[country_name]]
+  
+  for (related in related_countries) {
+    if (related %in% countries_list) {
+      j <- which(countries_list == related)
+      relationship_matrix[i, j] <- relationship_matrix[i, j] + 1
+    }
+  }
+}
+
+# Filter to include only countries with relationships
+has_relationships <- rowSums(relationship_matrix) > 0 | colSums(relationship_matrix) > 0
+filtered_matrix <- relationship_matrix[has_relationships, has_relationships]
+filtered_countries <- countries_list[has_relationships]
+filtered_continents <- country_continents[has_relationships]
+
+# Remove Arctic Region and AsiaEurope from the network visualization
+exclude_mask <- !(filtered_continents %in% c("Arctic Region", "AsiaEurope"))
+filtered_matrix <- filtered_matrix[exclude_mask, exclude_mask]
+filtered_countries <- filtered_countries[exclude_mask]
+filtered_continents <- filtered_continents[exclude_mask]
+```
+
+### 1.1.3 Network Visualization
+
+
+
+Here, we vizualise the mentions in a network graph, based on the mention-matrix. Each node represents a country and the edges represent the mentions between countries.
+The Fruchterman-Reingold algorithm arranges network nodes by simulating physical forces. 
+From an initial random configuration, nodes repel each other and edges act as springs pulling the nodes together. Forces are applied iteratively until the nodes are in a stable configuration (or the maximum number of iterations is reached).
+
+
+```{r network_plot_static, fig.width=12, fig.height=10, echo=FALSE}
+# Create an igraph object from the filtered matrix
+g <- graph_from_adjacency_matrix(filtered_matrix, mode = "directed", weighted = TRUE)
+
+# Set vertex attributes for continents
+V(g)$continent <- filtered_continents
+
+# Define continent colors
+continent_colors <- c(
+  "North America" = "#0D47A1",    # Dark blue
+  "Europe" = "#1976D2",           # Medium blue
+  "Asia" = "#B71C1C",             # Dark red
+  "Southeast Asia" = "#E57373",   # Lighter red
+  "Middle East" = "#E65100",      # Orange
+  "Africa" = "#2E7D32",           # Green
+  "Central America" = "#FBC02D",  # Yellow
+  "South America" = "#F9A825",    # Darker yellow
+  "Oceania" = "#00838F"           # Teal
+  # 'Arctic Region' and 'AsiaEurope' removed
+)
+
+# Map continents to colors
+V(g)$color <- sapply(V(g)$continent, function(cont) {
+  if(cont %in% names(continent_colors)) {
+    return(continent_colors[cont])
+  } else {
+    return("#808080")  # Default gray for any unmapped continents
+  }
+})
+
+# Set all edge weights to a low value to reduce attraction
+E(g)$weight <- 0.1  # Reduce attraction between connected nodes
+
+# Create a better layout with reduced attraction to spread countries more
+set.seed(1)
+layout <- layout_with_fr(g, 
+                        niter = 2000,  # Increase iterations for better convergence
+                        dim = 2,
+                        grid = "grid",
+                        weights = E(g)$weight,  # Use our reduced weights
+                        start.temp = 20  # Higher temperature for more initial movement
+)
+
+# Manually scale the layout to spread nodes more
+layout <- layout * 6
+
+# Calculate node degrees and sizes
+node_degrees <- degree(g, mode = "all")
+min_size <- 3
+max_size <- 14
+min_degree <- min(node_degrees)
+max_degree <- max(node_degrees)
+vertex_sizes <- min_size + (node_degrees - min_degree) * (max_size - min_size) / (max_degree - min_degree)
+
+# Modify country labels for display
+country_display_names <- V(g)$name
+country_display_names[country_display_names == "United States"] <- "USA"
+country_display_names[country_display_names == "Korea, South"] <- "South Korea"
+country_display_names[country_display_names == "Turkey (Turkiye)"] <- "Turkey"
+
+# Determine which countries to show labels for
+show_labels <- node_degrees >= 15
+show_labels[V(g)$name == "Ukraine"] <- TRUE
+show_labels[V(g)$name == "Micronesia, Federated States of"] <- FALSE
+show_labels[V(g)$name == "Brazil"] <- TRUE
+show_labels[V(g)$name == "Russia"] <- TRUE
+show_labels[V(g)$name == "Canada"] <- TRUE
+
+show_labels[V(g)$name == "Mexico"] <- TRUE
+show_labels[V(g)$name == "Turkey (Turkiye)"] <- TRUE
+show_labels[V(g)$name == "Saudi Arabia"] <- TRUE
+show_labels[V(g)$name == "Argentina"] <- TRUE
+show_labels[V(g)$name == "South Africa"] <- TRUE
+show_labels[V(g)$name == "Egypt"] <- TRUE
+show_labels[V(g)$name == "Namibia"] <- TRUE
+show_labels[V(g)$name == "Morocco"] <- TRUE
+show_labels[V(g)$name == "Vietnam"] <- TRUE
+show_labels[V(g)$name == "Venezuela"] <- TRUE
+show_labels[V(g)$name == "Chile"] <- TRUE
+
+# Plot the network
+plot(g, 
+     layout = layout, 
+     vertex.size = vertex_sizes,     # Size based on connectivity
+     vertex.color = V(g)$color,      # Color by continent
+     vertex.label = ifelse(show_labels, country_display_names, NA),
+     vertex.label.cex = 0.75,        # Label size
+     vertex.label.color = "black",
+     vertex.label.family = "sans",
+     vertex.label.font = 2,
+     vertex.frame.color = "gray90",
+     edge.width = 0.5,               # Lighter edges
+     edge.color = "gray85",
+     edge.arrow.size = 0,
+     main = "Country Relationships Network")
+
+# Add a legend for continents
+legend("right", 
+       legend = names(continent_colors),
+       fill = continent_colors, 
+       title = "Continents",
+       cex = 1,
+       bty = "n")
+
+# Example degrees for the size legend
+example_degrees <- c(min_degree, round(mean(node_degrees)), max_degree)
+example_labels <- as.character(example_degrees)
+example_sizes <- min_size + (example_degrees - min_degree) * (max_size - min_size) / (max_degree - min_degree)
+
+# Add a second legend for node sizes
+legend("topright",
+       legend = example_labels,
+       pt.cex = example_sizes / 2 * 0.8,
+       pch = 21,
+       pt.bg = "gray80",
+       title = "Number of\nConnections",
+       bty = "n",
+       y.intersp = 1.5,
+       x.intersp = 1.5,
+       xpd = TRUE)
+```
+
+We can see that the network is quite dense, with many countries having multiple connections. There are no clear sub clusters forming, which showcases the globalized and interconnected nature of todays world. 
+We can also see that the network is quite imbalanced with again the US and the UK dominating in central position. Continents are loosely grouped together.
+Some notable exceptions are Spain and the Netherlands, which are both close to many South and Central American countries, hinting at their past as colonial powers.
+
+
+
+## 1.2 Trade Relations
+
+After looking at the qualitative analysis of the mentions, we can now look at the quantitative analysis of the trade relations.
+Our data set contains information about the monetary value of imports and exports of each country. 
+We will start by looking at the trade distribution by region. 
+
+### 1.2.1 Trade by Region Piecharts
+
+```{r libraries2}
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(stringr)
+library(maps)
+library(ggrepel)
+library(scales)
+library(ggarrow)  
+library(plotly)   
+```
+
+
+```{r load_data}
+data <- read_csv("/home/luisa/Documents/University/BHT/Data Visualization/BHTDataVisualizationCourse/data/clean_data.csv", show_col_types = FALSE)
+```
+
+
+```{r parse_coordinates_function}
+parse_coordinates <- function(coord_text) {
+  if (is.na(coord_text) || coord_text == "") {
+    return(list(lat = NA, lon = NA))
+  }
+  
+  # Split by comma
+  parts <- str_split(coord_text, ",")[[1]]
+  if (length(parts) != 2) {
+    return(list(lat = NA, lon = NA))
+  }
+  
+  # Parse latitude
+  lat_part <- str_trim(parts[1])
+  lat_match <- str_match(lat_part, "([0-9]+)\\s+([0-9]+)\\s+([NS])")
+  if (is.na(lat_match[1])) {
+    return(list(lat = NA, lon = NA))
+  }
+  lat_deg <- as.numeric(lat_match[2])
+  lat_min <- as.numeric(lat_match[3])
+  lat_dir <- lat_match[4]
+  lat <- lat_deg + lat_min/60
+  if (lat_dir == "S") lat <- -lat
+  
+  # Parse longitude
+  lon_part <- str_trim(parts[2])
+  lon_match <- str_match(lon_part, "([0-9]+)\\s+([0-9]+)\\s+([EW])")
+  if (is.na(lon_match[1])) {
+    return(list(lat = NA, lon = NA))
+  }
+  lon_deg <- as.numeric(lon_match[2])
+  lon_min <- as.numeric(lon_match[3])
+  lon_dir <- lon_match[4]
+  lon <- lon_deg + lon_min/60
+  if (lon_dir == "W") lon <- -lon
+  
+  return(list(lat = lat, lon = lon))
+}
+```
+
+
+```{r extract_import_value_function}
+extract_import_value <- function(import_text) {
+  if (is.na(import_text) || import_text == "") {
+    return(0)
+  }
+  
+  match <- str_match(import_text, "\\$([0-9.]+)\\s*(trillion|billion|million)?")
+  if (is.na(match[1])) {
+    return(0)
+  }
+  
+  value <- as.numeric(match[2])
+  if (!is.na(match[3])) {
+    if (match[3] == "million") {
+      value <- value / 1000  # Convert to billions
+    } else if (match[3] == "trillion") {
+      value <- value * 1000  # Convert to billions
+    }
+  }
+  
+  return(value)
+}
+```
+
+
+```{r standardize_country_name_function}
+standardize_country_name <- function(country_name) {
+  country_name <- str_trim(country_name)
+  
+  if (country_name %in% names(country_alternatives)) {
+    return(country_name)
+  }
+  
+  for (standard_name in names(country_alternatives)) {
+    if (country_name %in% country_alternatives[[standard_name]]) {
+      return(standard_name)
+    }
+  }
+  
+  return(country_name)
+}
+```
+
+
+```{r parse_trade_partners_function}
+parse_trade_partners <- function(partners_text) {
+  if (is.na(partners_text) || partners_text == "") {
+    return(data.frame())
+  }
+  
+  partners_text <- str_split(partners_text, "note:")[[1]][1]
+  partners_text <- str_trim(partners_text)
+  
+  partners_text <- str_replace(partners_text, "Gambia, The", "Gambia")
+  partners_text <- str_replace(partners_text, "Bahamas, The", "Bahamas")
+  
+  pairs <- str_split(partners_text, ",")[[1]]
+  
+  result <- data.frame()
+  
+  for (pair in pairs) {
+    percent_match <- str_match(pair, "([0-9.]+)%")
+    if (is.na(percent_match[1])) next
+    
+    percentage <- as.numeric(percent_match[2])
+    
+    country_part <- str_replace(pair, "\\s*[0-9.]+%.*", "")
+    country_name <- str_trim(country_part)
+    
+    if (country_name != "" && !is.na(percentage)) {
+      result <- rbind(result, data.frame(
+        partner = standardize_country_name(country_name),
+        percentage = percentage
+      ))
+    }
+  }
+  
+  return(result)
+}
+```
+
+
+```{r trade_pies, fig.width=10, fig.height=6}
+# Create a dataframe with import values
+import_distribution <- as.data.frame(data) %>%
+  mutate(import_value_billions = sapply(`Economy..Imports`, extract_import_value)) %>%
+  filter(!is.na(import_value_billions)) %>%
+  # Add small offset to handle zeros and ensure log works
+  mutate(import_value_billions = import_value_billions + 0.01) %>%
+  arrange(desc(import_value_billions))
+
+# Get top 5 countries for labeling
+top_5_countries <- import_distribution %>%
+  head(5) %>%
+  mutate(
+    label = paste0(Country, "\n$", round(import_value_billions - 0.01), "B")  # Subtract offset for display
+  )
+
+
+# Recalculate total trade and labels for pie()
+region_trade <- as.data.frame(data) %>%
+  mutate(
+    import_value_billions = sapply(`Economy..Imports`, extract_import_value),
+    region = `Geography..Map.references`
+  ) %>%
+  mutate(region = ifelse(region == "Central America and the Caribbean", "Central America", region)) %>%
+  group_by(region) %>%
+  summarize(total_trade = sum(import_value_billions, na.rm = TRUE)) %>%
+  filter(!is.na(region)) %>%
+  # arrange(desc(total_trade)) %>%
+  mutate(
+    label = ifelse(region == "Southeast Asia",
+                   paste0(region, ":\n$", format(round(total_trade), big.mark = ","), "B"),
+                   paste0(region, ": $", format(round(total_trade), big.mark = ","), "B"))
+  )
+
+# Define colors (ensure ordering matches)
+region_colors <- c(
+  "North America" = "#0D47A1",
+  "Europe" = "#1976D2",
+  "Asia" = "#B71C1C",
+  "Southeast Asia" = "#E57373",
+  "Middle East" = "#E65100",
+  "Africa" = "#2E7D32",
+  "Central America" = "#FBC02D",
+  "South America" = "#F9A825",
+  "Oceania" = "#00838F"
+)
+
+# Match the colors to the regions present in your data
+used_colors <- region_colors[region_trade$region]
+# Plot the two pie charts side by side
+par(mfrow = c(1, 2))
+# Draw the pie chart
+pie(
+  region_trade$total_trade,
+  labels = region_trade$label,
+  col = used_colors,
+  main = paste0("Import Volume by Region\nTotal: $", format(round(sum(region_trade$total_trade)), big.mark = "'"), "B"),
+  cex = 0.6
+)
+
+# Create a dataframe with import values
+export_distribution <- as.data.frame(data) %>%
+  mutate(export_value_billions = sapply(`Economy..Exports`, extract_import_value)) %>%
+  filter(!is.na(export_value_billions)) %>%
+  # Add small offset to handle zeros and ensure log works
+  mutate(export_value_billions = export_value_billions + 0.01) %>%
+  arrange(desc(export_value_billions))
+
+# Get top 5 countries for labeling
+top_5_countries_exports <- export_distribution %>%
+  head(5) %>%
+  mutate(
+    label = paste0(Country, "\n$", round(export_value_billions - 0.01), "B")  # Subtract offset for display
+  )
+
+# Recalculate total trade and labels for pie()
+region_trade_exports <- as.data.frame(data) %>%
+  mutate(
+    export_value_billions = sapply(`Economy..Exports`, extract_import_value),
+    region = `Geography..Map.references`
+  ) %>%
+  mutate(region = ifelse(region == "Central America and the Caribbean", "Central America", region)) %>%
+  group_by(region) %>%
+  summarize(total_trade = sum(export_value_billions, na.rm = TRUE)) %>%
+  filter(!is.na(region)) %>%
+  # arrange(desc(total_trade)) %>%
+  mutate(
+    label = ifelse(region == "Southeast Asia",
+                   paste0(region, ":\n$", format(round(total_trade), big.mark = ","), "B"),
+                   paste0(region, ": $", format(round(total_trade), big.mark = ","), "B"))
+  )
+
+# Match the colors to the regions present in your data
+used_colors <- region_colors[region_trade_exports$region]
+
+# Draw the pie chart
+pie(
+  region_trade_exports$total_trade,
+  labels = region_trade_exports$label,
+  col = used_colors,
+  main = paste0("Export Volume by Region\nTotal: $", format(round(sum(region_trade_exports$total_trade)), big.mark = "'"), "B"),
+  cex = 0.6
+)
+par(mfrow = c(1, 1)) # Reset to default
+```
+
+
+
+Looking at the pie charts, we can see that there are 4 regions dominating the trade:
+Europe, Asia, South-East Asia and North America. These are coincidentally also the regions that have the most incoming relations in the Chord diagram in 3.1.1. 
+We can see that these regions play a mayor role both politically as well as in global trade.
+Interestingly the totals for imports and exports are a bit different, this might for example be due to inaccuracies in reporting. Also, we used the most recent data available, which is not always from the same year.
+We can see that the imports and exports are very similar per region, with some minor differences. 
+For example we can see that North America has a higher import volume than export volume.
+
+
+### 1.2.2 Top Importers Violin Plot
+
+```{r violin_plot, fig.height=3, fig.width=5, fig.align='center'}
+ggplot(import_distribution, aes(x = "Global Imports", y = import_value_billions)) +
+  geom_violin(fill = "#1976D2", alpha = 0.6) +
+  geom_jitter(width = 0.1, alpha = 0.4, size = 2, color = "#0D47A1") +
+  geom_point(data = top_5_countries, 
+             aes(y = import_value_billions),
+             color = "red", size = 2) +
+  geom_text_repel(
+    data = top_5_countries,
+    aes(label = label),
+    nudge_x = 0.3,
+    direction = "y",
+    hjust = 0,
+    segment.color = "red",
+    segment.alpha = 0.5,
+    box.padding = 0.5,
+    point.padding = 0.3,
+    force = 10, 
+    cex = 2
+  ) +
+  labs(
+    title = "Import Values by Country(Log2 Scale)",
+    subtitle = "Top 5 importing countries highlighted in red",
+    x = "",
+    y = "Import Value (Billions USD) - Log2 Scale"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 12, face = "bold"),
+    axis.text = element_text(size = 8),
+    axis.title = element_text(size = 10),
+    axis.text.x = element_text(angle = 0)
+  ) +
+  scale_y_continuous(
+    trans = scales::log2_trans(),
+    labels = function(x) scales::dollar_format(scale = 1, prefix = "$")(x - 0.01),  # Subtract offset for display
+    breaks = scales::breaks_log(n = 10, base = 2)
+  ) +
+  geom_hline(
+    yintercept = mean(import_distribution$import_value_billions), 
+    color = "#B71C1C", 
+    linetype = "dashed", 
+    size = 1
+  ) +
+  annotate(
+    "text", 
+    x = 0, 
+    y = mean(import_distribution$import_value_billions), 
+    label = paste0("Mean: $", round(mean(import_distribution$import_value_billions) - 0.01), "B"),  # Subtract offset for display
+    color = "#B71C1C",
+    vjust = -0.5,
+    hjust = -3, 
+    cex = 0.6
+  )
+```
+
+
+Next we look at the top importers. Note, that the y axis is log scaled. We can see that there is a few countries highlighted at the very top. 
+Coincidentally these are also countries we have seen in the center of the network graph.
+The top importers are also those that are most relevant to understand the background of other countries.
+Also analougous to our analysis of country mentions, we can see that there are a few countries importing a lot and then a long tail of countries importing just a little.
+Chinas and Japans positions at the top of the distribution of importers are not reflected in their numbers of mentions, but are reflected in their position in the network graph.
+This could be another hint of the western centric nature of the dataset. 
+It is interesting to see that even though Japan and China have not been mentioned as much in the natural language descriptions of countries, there position in the network graph seems to have been self correcting due to their global trade relations.
+
+
+
+### 1.2.3 Trade Flow Map
+
+
+```{r process_data}
+coords_list <- lapply(data$`Geography..Geographic.coordinates`, parse_coordinates)
+data$lat <- sapply(coords_list, function(x) x$lat)
+data$lon <- sapply(coords_list, function(x) x$lon)
+
+data$import_value_billions <- sapply(data$`Economy..Imports`, extract_import_value)
+```
+
+
+
+```{r create_trade_relationships}
+trade_relationships <- data.frame()
+
+for (i in 1:nrow(data)) {
+  country <- data$Country[i]
+  import_value <- data$import_value_billions[i]
+  country_lat <- data$lat[i]
+  country_lon <- data$lon[i]
+  
+  if (is.na(country_lat) || is.na(country_lon) || import_value == 0) {
+    next
+  }
+  
+  partners <- parse_trade_partners(data$`Economy..Imports...partners`[i])
+  
+  if (nrow(partners) > 0) {
+    for (j in 1:nrow(partners)) {
+      partner_name <- partners$partner[j]
+      percentage <- partners$percentage[j]
+      
+      partner_row <- which(data$Country == partner_name)
+      if (length(partner_row) == 0) {
+        found <- FALSE
+        for (alt_name in names(country_alternatives)) {
+          if (partner_name %in% country_alternatives[[alt_name]]) {
+            partner_row <- which(data$Country == alt_name)
+            if (length(partner_row) > 0) {
+              found <- TRUE
+              break
+            }
+          }
+        }
+        if (!found) {
+          # cat("Country not found:", partner_name, "\n")
+          next
+        }
+      }
+      
+      partner_lat <- data$lat[partner_row[1]]
+      partner_lon <- data$lon[partner_row[1]]
+      
+      if (!is.na(partner_lat) && !is.na(partner_lon)) {
+        line_thickness <- (percentage / 100) * import_value
+        distance <- sqrt((partner_lon - country_lon)^2 + (partner_lat - country_lat)^2)
+        
+        if (distance < 10 && line_thickness > 20) {
+          curvature_category <- "extreme"
+          curvature_value <- 1.2
+        } else if (distance < 10 || line_thickness > 10) {
+          curvature_category <- "very_high"
+          curvature_value <- 0.9
+        } else if (distance < 10) {
+          curvature_category <- "high"
+          curvature_value <- 0.6
+        } else if (distance < 30 || line_thickness > 5) {
+          curvature_category <- "medium_high"
+          curvature_value <- 0.9
+        } else if (distance < 30) {
+          curvature_category <- "medium"
+          curvature_value <- 0.3
+        } else {
+          curvature_category <- "low" 
+          curvature_value <- 0.1
+        }
+        
+        trade_relationships <- rbind(trade_relationships, data.frame(
+          from_country = country,
+          to_country = partner_name,
+          from_lat = country_lat,
+          from_lon = country_lon,
+          to_lat = partner_lat,
+          to_lon = partner_lon,
+          percentage = percentage,
+          import_value = import_value,
+          line_thickness = line_thickness,
+          curvature_category = curvature_category,
+          curvature = curvature_value,
+          arrow_size = 0.2 + (0.1 * log1p(line_thickness)),
+          distance = distance
+        ))
+      }
+    }
+  }
+}
+
+```
+
+```{r identify_top_50}
+trade_relationships <- trade_relationships[order(-trade_relationships$line_thickness), ]
+trade_relationships$is_top_50 <- 1:nrow(trade_relationships) <= 50
+
+
+```
+
+```{r arrow_helper_functions}
+get_bend_factor <- function(level, distance) {
+  base_levels <- list(
+    "low" = 3.5,         
+    "medium" = 3.5,      
+    "medium_high" = 4, 
+    "high" = 4.5,        
+    "very_high" = 5,   
+    "extreme" = 5.5      
+  )
+  distance_factor <- 1 + log1p(distance/20)
+  return(base_levels[[level]] * distance_factor)
+}
+
+get_bend_direction <- function(start_lon, start_lat, end_lon, end_lat) {
+  if (abs(start_lon - end_lon) < 5) {
+    if (end_lat > start_lat) return(1) else return(-1)
+  }
+  if (end_lon > start_lon) return(1) else return(-1)
+}
+```
+
+
+```{r create_arrow_paths}
+arrow_data <- data.frame()
+t <- seq(0, 1, length.out = 50)
+
+for (i in 1:nrow(trade_relationships)) {
+  rel <- trade_relationships[i,]
+  
+  from_lon <- rel$to_lon
+  to_lon <- rel$from_lon
+  from_lat <- rel$to_lat
+  to_lat <- rel$from_lat
+  
+  x_range <- to_lon - from_lon
+  y_range <- to_lat - from_lat
+  
+  distance <- sqrt(x_range^2 + y_range^2)
+  
+  bend_dir <- get_bend_direction(from_lon, from_lat, to_lon, to_lat)
+  bend_factor <- get_bend_factor(rel$curvature_category, distance)
+  
+  is_vertical <- abs(x_range) < 5
+  if (is_vertical) {
+    x <- from_lon + x_range * t + bend_dir * bend_factor * sin(pi * t) * 1.2
+    y <- from_lat + y_range * t
+  } else {
+    x <- from_lon + x_range * t
+    y <- from_lat + y_range * t + bend_dir * bend_factor * sin(pi * t)
+  }
+  
+  width_scaled <- sqrt(rel$line_thickness) * 2
+  alpha_value <- ifelse(rel$is_top_50, 0.8, 0.4)
+  
+  arrow_data <- rbind(arrow_data, data.frame(
+    x = x,
+    y = y,
+    group = i,
+    width = width_scaled,
+    is_top_50 = rel$is_top_50,
+    alpha_value = alpha_value
+  ))
+}
+```
+
+
+```{r create_visualization, fig.width=20, fig.height=12, out.width='100%'}
+# Create a mapping of map references to continents and colors
+continent_colors <- c(
+  # Western-aligned regions in blue spectrum
+  "North America" = "#0D47A1",    # Dark blue
+  "Europe" = "#1976D2",           # Medium blue
+  
+  # Asian regions in red spectrum
+  "Asia" = "#B71C1C",             # Dark red
+  "Southeast Asia" = "#E57373",   # Lighter red
+  
+  # Updated colors as requested
+  "Middle East" = "#E65100",      # Orange
+  "Africa" = "#2E7D32",           # Green
+  "Central America" = "#FBC02D",  # Yellow
+  "South America" = "#F9A825",    # Darker yellow
+  
+  # Other regions
+  "Oceania" = "#00838F",          # Teal
+  "Unknown" = "#757575"           # Gray for unknown/missing values
+)
+
+# Handle missing values and create node sizes directly
+valid_data <- !is.na(data$lat) & !is.na(data$lon)
+node_sizes <- rep(1, nrow(data))  # Default size for all points
+trade_volumes <- data$import_value_billions
+trade_volumes[is.na(trade_volumes)] <- 0
+max_volume <- max(trade_volumes, na.rm = TRUE)
+node_sizes[valid_data] <- 1 + 4 * (trade_volumes[valid_data] / max_volume)
+
+# Handle missing continent data
+data$continent <- data$`Geography..Map.references`
+data$continent[is.na(data$continent)] <- "Unknown"
+
+world_map <- map_data("world")
+
+p <- ggplot() +
+  geom_polygon(data = world_map, 
+               aes(x = long, y = lat, group = group), 
+               fill = "lightgray", 
+               color = "white", 
+               size = 0.2) +
+  
+  geom_arrow(data = arrow_data,
+             aes(x = x, y = y, 
+                 group = group,
+                 linewidth = width * 1.5,
+                 alpha = alpha_value * width/50),  
+             color = "cyan4") +
+  
+  geom_point(data = data[valid_data, ],
+             aes(x = lon, y = lat,
+                 color = continent,
+                 size = node_sizes[valid_data]),
+             alpha = 0.8) +
+  
+  scale_color_manual(name = "Continent/Region",
+                    values = continent_colors,
+                    guide = guide_legend(override.aes = list(size = 8))) +
+  
+  scale_size_continuous(name = "Trade Volume",
+                       range = c(1, 5),
+                       breaks = c(1, 3, 5),
+                       labels = c("No data/0", 
+                                "$500B",
+                                "$5T"),
+                       guide = guide_legend(override.aes = list(size = c(0.6, 3, 5)))) +
+  
+  scale_linewidth_continuous(name = "Trade Flow Volume\n(Billions USD)",
+                         range = c(0.2, 3),
+                         breaks = c(10, 50),
+                         labels = c("$50B", "$500B"),
+                         guide = guide_legend(override.aes = list(alpha = 1))) +
+  
+  scale_alpha_identity() +
+  
+  theme_void() +
+  theme(
+    plot.title = element_text(size = 26, hjust = 0.5, margin = margin(b = 20)),
+    plot.subtitle = element_text(size = 18, hjust = 0.5, margin = margin(b = 20)),
+    legend.position = "right",
+    legend.box = "vertical",
+    legend.margin = margin(10, 10, 10, 10),
+    legend.box.spacing = unit(2, "lines"),
+    legend.text = element_text(size = 16),
+    legend.title = element_text(size = 18, face = "bold"),
+    legend.key.size = unit(2.5, "lines"),
+    legend.key.height = unit(2.5, "lines"),
+    legend.spacing.y = unit(2, "lines"),
+    panel.background = element_rect(fill = "lightblue", color = NA)
+  ) +
+  
+  labs(
+    title = "Global Trade Relationships",
+    subtitle = "Directed import flows: arrows point from trade partners to importing countries\nTop 50 relationships by trade volume highlighted, others shown with low opacity",
+    # caption = "Arrow thickness = Import Volume (billions) × Trade Share (%)\nArrows point from trade partner to importing country\nNode size indicates total trade volume (smallest nodes represent countries with no data or zero trade)"
+  ) +
+  
+  coord_fixed(ratio = 1.3, xlim = c(-180, 180), ylim = c(-60, 80))
+
+```
+
+
+```{r display_plot, fig.width=20, fig.height=12, out.width='100%'}
+# Display the plot
+ggsave("global_trade_relationships.png", p, width = 20, height = 12, dpi = 300)
+print(p)
+```
+
+
+Finally we look at a flow map of the trade relationships.
+We can clearly see the trade hubs of the world: Europe, Asia and South-East Asia as well as North America.
+We can also see that the trade flows are not evenly distributed, but rather concentrated in a few countries.
+China and the US are the two countries with the largest trade flows. We can also clearly see the infamous trade deficit between the US and China.
+Even though trade is globalized and trade relations can be strong across continents, the majority of large trade flows are still locally between neighbouring countries.
+Long distance trades are primarily dominated by Europe, the US and China.
+
+
+## 1.3 Conclusion
+Todays world is highly interconnected and globalized. However, world regions still remain loosely grouped together by their importance to each other and the trade between neighbouring countries still plays an important role.
+Not all of the worlds regions are equally connected to each other. North America and Europe as well as Asia and South-East Asia stick out here as most globallized. 
+Those regions are strongly connected to each other trough trade but also to the rest of the world. The Middle East, Africa, Oceania as well as South and Central America are the regions that are least connected to the rest of the world.
+The countries that are most relevant to the background of other countries tend to also be the ones most connected trough trade. These can be seen as the most important global players both historically as well as in todays world.
+As an additional note, we can see that either the influence from non-Western countries is not reflected in their historical and political impact, or the data is biased towards Western countries. 
+We lean towards the latter conclusion, because Japan and especially China did historically have a strong influence on the world, and are also pulled toward the center of the network graph.
+
+
+

@@ -1,0 +1,294 @@
+---
+title: "Country Relationships Chord Diagram"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Country Relationships Analysis
+
+This document analyzes the relationships between the different countries present in our dataset.
+
+The first part of the analysis is based on mentions in each country's background information. Our dataset has a short description in natural language for each country, containing information about the country's history, politics, and other relevant information. This gives us a bit of context to the country, but is not in tabular format.
+
+To go from the description to a more structured format, we find mentions of other countries in the description of each country. For example, Argentina's background description text starts like this:
+
+> "In 1816, the United Provinces of the Río de la Plata declared their independence from Spain. After Bolivia, Paraguay, and Uruguay went their separate ways, the area that remained became Argentina. ..."
+
+Here, we find mentions of "Spain", "Bolivia", "Paraguay", and "Uruguay".
+
+For each country, we also define a list of alternative names, e.g., "United Kingdom" is also known as "Britain", "UK", "England", "British". In this way, we can search for the mentions of other countries in the description of each country, and store the relationships between countries in a matrix \(A = (a_{i,j})\), where:
+
+\[
+a_{i,j} =
+\begin{cases}
+1 & \text{if country $j$ mentions country $i$} \\
+0 & \text{otherwise}
+\end{cases}
+\]
+
+where \(n\) is the number of countries. This matrix is used for our subsequent analysis.
+
+
+
+```{r load-libraries, message=FALSE, warning=FALSE, echo=FALSE}
+# Load required packages
+library(readr)     # For reading CSV files
+library(circlize)  # For creating chord diagrams
+library(RColorBrewer)  # For color palettes
+```
+
+```{r load-data, echo=FALSE}
+# Load the CSV file
+countries_data <- read_csv("/home/luisa/Documents/University/BHT/Data Visualization/BHTDataVisualizationCourse/data/clean_data.csv", show_col_types = FALSE)
+
+# Convert the CSV data to a more usable format
+countries <- list()
+for (i in 1:nrow(countries_data)) {
+  country_name <- countries_data$Country[i]
+  countries[[country_name]] <- as.list(countries_data[i, -1])  # Exclude the country column
+}
+
+# Remove "World" from the list of countries if it exists
+if ("World" %in% names(countries)) {
+  countries <- countries[names(countries) != "World"]
+}
+```
+
+```{r define-relationships, echo=FALSE}
+# Create a data structure to store country relationships
+country_relationships <- list()
+
+# Define alternative names for certain countries
+country_alternatives <- list(
+  "United Kingdom" = c("Britain", "UK", "England", "British"),
+  "United States" = c("USA", "US"),
+  "China" = c("PRC", "Chinese", "Chin"),
+  "Turkey (Turkiye)" = c("Turkiye", "Turkey", "Turkish"),
+  "Congo, Democratic Republic of the" = c("DRC", "DR Congo", "Congo-Kinshasa", "Congo republics"),
+  "Congo, Republic of the" = c("Congo-Brazzaville", "Congo republics"),
+  "Czechia" = c("Czech Republic", "Czech"),
+  "Eswatini" = c("Swaziland", "Swazee"),
+  "Burma" = c("Myanmar", "Burmese"),
+  "Holy See (Vatican City)" = c("Vatican", "Vatican City"),
+  "Micronesia, Federated States of" = c("FSM", "Micronesia"),
+  "Gambia, The" = c("The Gambia", "Gambia"),
+  "Bahamas, The" = c("The Bahamas", "Bahamas"),
+  "Korea, North" = c("North Korea", "DPRK", "N. Korea"),
+  "Korea, South" = c("South Korea", "ROK", "S. Korea"),
+  "Timor-Leste" = c("East Timor"),
+  "Taiwan" = c("Republic of China", "ROC"),
+  "Vietnam" = c("Viet Nam"),
+  "Germany" = c("German"),
+  "France" = c("French"),
+  "Italy" = c("Italian"),
+  "Spain" = c("Spanish"),
+  "Portugal" = c("Portuguese"),
+  "Greece" = c("Greek"),
+  "Netherlands" = c("Dutch"),
+  "Belgium" = c("Belgian"),
+  "Sweden" = c("Swedish"),
+  "Norway" = c("Norwegian"),
+  "Denmark" = c("Danish"),
+  "Switzerland" = c("Swiss"),
+  "Poland" = c("Polish"),
+  "Hungary" = c("Hungarian"),
+  "Finland" = c("Finnish"),
+  "United Arab Emirates" = c("UAE", "Emirates"),
+  "New Zealand" = c("NZ"),
+  "Trinidad and Tobago" = c("Trinidad & Tobago")
+)
+```
+
+```{r find-relationships, echo=FALSE}
+# For each country, find which other countries are mentioned in its background
+for (country_name in names(countries)) {
+  country_background <- countries[[country_name]]$`Introduction..Background`
+  related_countries <- c()
+  
+  if (!is.null(country_background) && !is.na(country_background)) {
+    # Check for mentions of each other country
+    for (other_country in names(countries)) {
+      # Skip self-references
+      if (other_country != country_name) {
+        # Check if the other country name appears in the background
+        if (grepl(other_country, country_background, ignore.case = TRUE)) {
+          related_countries <- c(related_countries, other_country)
+        } else {
+          # Check alternative names if they exist for this country
+          if (other_country %in% names(country_alternatives)) {
+            for (alt_name in country_alternatives[[other_country]]) {
+              if (grepl(alt_name, country_background, ignore.case = TRUE)) {
+                related_countries <- c(related_countries, other_country)
+                break  # Found a match, no need to check other alternatives
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  # Store the relationships for this country
+  country_relationships[[country_name]] <- related_countries
+}
+```
+
+```{r prepare-visualization-data, echo=FALSE}
+# Convert the relationships to a matrix format for the chord diagram
+countries_list <- unique(names(country_relationships))
+n_countries <- length(countries_list)
+
+# Get continent information for each country
+country_continents <- sapply(countries_list, function(country) {
+  continent <- countries[[country]]$`Geography..Map.references`
+  if(is.null(continent) || is.na(continent)) {
+    return("Unknown")
+  } else {
+    return(continent)
+  }
+})
+
+# Create an empty matrix
+relationship_matrix <- matrix(0, nrow = n_countries, ncol = n_countries)
+rownames(relationship_matrix) <- countries_list
+colnames(relationship_matrix) <- countries_list
+
+# Fill the matrix with relationship data
+for (i in 1:n_countries) {
+  country_name <- countries_list[i]
+  related_countries <- country_relationships[[country_name]]
+  
+  for (related in related_countries) {
+    if (related %in% countries_list) {
+      j <- which(countries_list == related)
+      relationship_matrix[i, j] <- relationship_matrix[i, j] + 1
+    }
+  }
+}
+
+# Filter to include only countries with at least one relationship
+has_relationships <- rowSums(relationship_matrix) > 0 | colSums(relationship_matrix) > 0
+filtered_matrix <- relationship_matrix[has_relationships, has_relationships]
+filtered_continents <- country_continents[has_relationships]
+
+# Create a more manageable matrix by keeping only countries with multiple relationships
+relationship_threshold <- 2
+significant_relationships <- rowSums(filtered_matrix) >= relationship_threshold | 
+                            colSums(filtered_matrix) >= relationship_threshold
+final_matrix <- filtered_matrix[significant_relationships, significant_relationships]
+final_continents <- filtered_continents[significant_relationships]
+
+# Sort countries by continent
+continent_order <- order(final_continents)
+final_matrix <- final_matrix[continent_order, continent_order]
+final_continents <- final_continents[continent_order]
+
+# Group countries by continent
+unique_continents <- unique(final_continents)
+continent_countries <- lapply(unique_continents, function(cont) {
+  rownames(final_matrix)[final_continents == cont]
+})
+names(continent_countries) <- unique_continents
+
+# Create a continent-level matrix
+continent_matrix <- matrix(0, nrow = length(unique_continents), ncol = length(unique_continents))
+rownames(continent_matrix) <- unique_continents
+colnames(continent_matrix) <- unique_continents
+
+# Fill the continent matrix with aggregated relationship data
+for (i in 1:nrow(final_matrix)) {
+  for (j in 1:ncol(final_matrix)) {
+    if (final_matrix[i, j] > 0) {
+      source_continent <- final_continents[i]
+      target_continent <- final_continents[j]
+      continent_matrix[source_continent, target_continent] <- 
+        continent_matrix[source_continent, target_continent] + final_matrix[i, j]
+    }
+  }
+}
+
+# Rename "Central America and the Caribbean" to "Central America" in the data
+final_continents[final_continents == "Central America and the Caribbean"] <- "Central America"
+unique_continents <- unique(final_continents)
+
+# Update continent_countries list with the new name
+if ("Central America and the Caribbean" %in% names(continent_countries)) {
+  continent_countries[["Central America"]] <- continent_countries[["Central America and the Caribbean"]]
+  continent_countries[["Central America and the Caribbean"]] <- NULL
+}
+
+# Update continent_matrix with the new name
+if ("Central America and the Caribbean" %in% rownames(continent_matrix)) {
+  rownames(continent_matrix)[rownames(continent_matrix) == "Central America and the Caribbean"] <- "Central America"
+  colnames(continent_matrix)[colnames(continent_matrix) == "Central America and the Caribbean"] <- "Central America"
+}
+```
+
+## Continent Relationships Chord Diagram
+
+The following chord diagram visualizes the relationships between continents based on country mentions:
+
+```{r chord-diagram, echo=FALSE, message=FALSE, warning=FALSE, results='hide', fig.width=12, fig.height=12}
+# Create a more pleasant color palette for continents
+# Using a custom palette with darker, more saturated colors for better visibility
+continent_colors <- c(
+  "Africa" = "#0D47A1",       # Darker Blue
+  "Asia" = "#B71C1C",         # Darker Red
+  "Central America" = "#E65100", # Darker Orange
+  "Europe" = "#33691E",       # Darker Green
+  "Middle East" = "#D84315",  # Darker Deep Orange
+  "North America" = "#4527A0", # Darker Purple
+  "Oceania" = "#00695C",      # Darker Teal
+  "South America" = "#FF8F00", # Darker Amber
+  "Southeast Asia" = "#AD1457", # Darker Pink
+  "Arctic Region" = "#006064", # Darker Cyan
+  "AsiaEurope" = "#4E342E"    # Darker Brown
+)
+
+# Create the chord diagram for continents
+par(mar = c(1, 1, 3, 1))
+chordDiagram(
+  continent_matrix,
+  grid.col = continent_colors,
+  transparency = 0.1,  
+  directional = TRUE,
+  direction.type = "arrows",
+  link.arr.type = "big.arrow",
+  link.sort = TRUE,
+  link.largest.ontop = TRUE,
+  annotationTrack = "grid",
+  preAllocateTracks = list(track.height = 0.1),
+  annotationTrackHeight = c(0.05, 0.1),
+  grid.border = "black"  # Add thin black borders around sectors
+)
+
+# Add labels for continents
+circos.track(track.index = 1, panel.fun = function(x, y) {
+  sector.index = get.cell.meta.data("sector.index")
+  xlim = get.cell.meta.data("xlim")
+  ylim = get.cell.meta.data("ylim")
+  
+  circos.text(
+    mean(xlim), ylim[1], 
+    sector.index, 
+    facing = "clockwise",
+    niceFacing = TRUE, 
+    adj = c(0, 0.5),
+    cex = 0.8
+  )
+}, bg.border = NA)
+
+# Add title with larger font size
+title(main = "World Region Relationships",
+      cex.main = 1.8,
+      font.main = 2)
+```
+
+## Summary
+
+```
+
+This analysis shows how countries are interconnected based on mentions in their background information. The chord diagram visualizes these relationships at the continent level, highlighting how regions of the world relate to each other. 
