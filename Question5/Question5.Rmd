@@ -407,7 +407,7 @@ merged_df$Continent[51] <-  "Europe"
 
 
 
-# overview
+# data exploration 
 
 
 
@@ -494,66 +494,7 @@ ggplot(merged_df, aes(x = cereal_yield_kg_ha, fill = Continent)) +
 
 ```
 
-```{r, include=FALSE}
 
-vars_corr <- c(
-
-
-  
-  "Coal.consumption.per.HA",
-  "petrol.consumption.per.HA",
-  "Natural.gas.per.HA",
-  "agricultural.Water.withdrawal.per.HA",
-  
-
-  
-  #"Insecticides_per_HA",
-  "npk_per_ha",
-  #"Herbicides_per_HA",
-  "agri_prod_value_usdppp_per_ha",
-
-  
-  "Coal.consumption.tons",
-  "petrol.consumption.bbl",
-  "Natural.gas.consumption.m3",
-  "Water.withdrawal.agricultural.m3",
-  
-  #"npk_Agricultural_Use_t",
-  #"pk_Agricultural_Use_t",
-  #"Urea_Agricultural_Use_t",
-  #"Herbicides_Agricultural_Use_t",
-  #"Insecticides_Agricultural_Use_t",
-  
-  #"agri_land_share_total_land_pct", 
-  #"arable_land_share_agri_pct",
-  #"perm_crops_share_agri_pct", 
-  #"perm_pasture_share_agri_pct",
-  #"irrigation_share_cropland_pct"
-
-
-  #"Country_area1000_ha",                                                                                               # "Cropland_Area_1000_ha"
- 
- # Production 
- 
-  "cereal_prod_t",
-  #"eggs_prod_t",
-  #"fruit_prod_t",
-  "maize_prod_t",
-  "milk_prod_t",
-  "pulses_prod_t"
-  #"sugar_crop_prod_t"
-)
-corr_data <- merged_df %>% select(all_of(vars_corr))
-# Imputation
-imputed <- imputePCA(corr_data, ncp = 2)
-corr_data <- imputed$completeObs
-
-corr_data <- as.data.frame(corr_data)
-corr_data$Continent <- merged_df$Continent
-corr_data$Country <- merged_df$ID_Npm_Country
-
-#corrplot(corr_data, method = "color", type = "upper", tl.col = "black", addCoef.col = "black")
-```
 
 
 
@@ -596,36 +537,7 @@ vars_pca_per_HA <- c(
   "irrigation_share_cropland_pct"
 )
 
-vars_pca_abso <- c(
 
-  "agri_prod_value_usdppp_per_ha",
-
-  
-  "Coal.consumption.tons",
-  "petrol.consumption.bbl",
-  "Natural.gas.consumption.m3",
-  "Water.withdrawal.agricultural.m3",
-  
-  "npk_Agricultural_Use_t",
-  "pk_Agricultural_Use_t",
-  "Urea_Agricultural_Use_t",
-  "Herbicides_Agricultural_Use_t",
-  "Insecticides_Agricultural_Use_t",
-  
-
-  "Country_area1000_ha",                                                                                               #             
-  "Cropland_Area_1000_ha",
- 
- # Production 
- 
-  "cereal_prod_t",
-  "eggs_prod_t",
-  "fruit_prod_t",
-  "maize_prod_t",
-  "milk_prod_t",
-  "pulses_prod_t",
-  "sugar_crop_prod_t"
-)
 
 var_categories <- c(
 
@@ -757,53 +669,45 @@ fviz_pca_ind(res_pca,
   ggtitle("Individuals Factor Map (colored by Continent)") +
   theme_minimal()
 ```
-This graph displays countries projected on the first two principal components, colored by continent. The dimensions reflect contrasting agricultural and resource consumption profiles:
+### Bottom-left quadrant (−Dim1, −Dim2):
+Characterized by high agricultural yields, intensive NPK fertilizer use, and moderate to lower energy/water consumption.
 
-Dimension 1 (32.9% of variance): Primarily separates countries by energy and water consumption. Countries on the left exhibit higher usage of petrol, coal, gas, and agricultural water, while countries on the right have lower consumption or other distinguishing features.
+Dominated by European and Southeast Asian countries.
 
-Dimension 2 (13.2% of variance): Opposes countries with high agricultural yields and NPK fertilizer use (bottom) to those with higher energy/water inputs relative to output (top).
+This quadrant may represent efficient and productive agricultural systems, where outputs are achieved with relatively optimized input use.
 
-A continental reading highlights several regional patterns:
+### Upper-left quadrant (−Dim1, +Dim2):
+Associated with high energy and water consumption, but lower agricultural yields.
 
-Bottom-Left quadrant (high yields, high NPK, low energy use): Concentration of European and Southeast Asian countries, suggesting more efficient or yield-oriented agricultural systems with moderate input reliance.
+Includes some countries from North America and Oceania.
 
-Upper-Left quadrant (high energy/water use, low yield): Includes several North American and Oceanian countries, hinting at higher resource intensity with less emphasis on yield efficiency in the observed variables.
+This could reflect input-heavy systems with lower overall efficiency or different agricultural priorities (e.g., livestock over crops).
 
-Right-hand side (lower input usage): Many African and Asian countries are projected here, likely reflecting lower overall resource consumption or differing agricultural structures.
+### Right side of the map (+Dim1):
+Countries in this region exhibit lower energy and water use, though their yield or input profiles are more mixed.
 
-Central area: Countries from the Middle East, Central America, and the Caribbean tend to cluster near the origin, indicating more balanced or heterogeneous profiles not dominated by any one component.
+Several African and Asian countries cluster here.
 
-Lastly, the agricultural production value per hectare, pointing in an intermediate direction, may align more with the bottom-left quadrant—supporting the idea that high yields and targeted input use (like NPK) contribute to higher economic returns per hectare, especially in developed or export-oriented systems.
+This may reflect less resource-intensive agriculture, either due to structural constraints or different development levels.
 
-```{r, include=FALSE}
-library(ggrepel)
+### Center of the map:
+Countries from Central America, the Middle East, and others are dispersed around the origin, indicating no strong association with either axis. These may represent diverse or transitional profiles, balancing input use and productivity.
 
-library(ggplot2)
-library(ggrepel)
+### Agricultural Value per Hectare: A Crosscutting Variable
+The variable representing the average agricultural production value per hectare (USD PPP) appears to point in an intermediate direction—neither fully aligned with input intensity nor with yield exclusively. This suggests that:
 
-# Extraire les scores PCA
-ind_coords <- as.data.frame(res_pca$x[, 1:2])
-ind_coords$Country <- pca_data$ID_Npm_Country
+Value creation may result from a combination of yield and input optimization, rather than from raw input intensity alone.
 
-# Plot
-ggplot(ind_coords, aes(x = PC1, y = PC2, label = Country)) +
-  geom_point(color = "steelblue") +
-  geom_text_repel(size = 3, max.overlaps = 100) +
-  theme_minimal() +
-  ggtitle("Individuals Factor Map (labels instead of legend)")
+Countries with both moderate yields and access to water/energy infrastructure (e.g., some European nations) may achieve better economic valorization of their land.
 
-```
+### Caution and Final Remarks
+While the PCA helps differentiate agricultural input-output profiles, several caveats apply:
 
-```{r,include=FALSE}
-fviz_pca_biplot(res_pca, 
-                label = "var", 
-                habillage = pca_data$Continent, 
-                palette = "jco",
-                addEllipses = TRUE, 
-                repel = TRUE, 
-                col.var = "steelblue")
-```
+Energy and water consumption do not directly correlate with higher performance globally; contextual factors (e.g., climate, technology, export orientation) likely moderate these effects.
 
+The overlap of countries from different continents indicates high internal heterogeneity, suggesting that development models and agricultural strategies vary widely within regions.
+
+Lastly, the PCA simplifies multidimensional relationships into two axes—so non-linearities or interaction effects may be obscured.
 
 
 
