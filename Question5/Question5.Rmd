@@ -433,13 +433,13 @@ library(reshape2)  # pour melt
 
 # Étape 1 : Min-max normalization des deux variables
 df_violin <- merged_df %>%
-  select(Continent, cereal_yield_kg_ha, agricultural.Water.withdrawal.per.HA) %>%
+  select(Continent, cereal_yield_kg_ha, agri_land_share_total_land_pct) %>%
   mutate(
     cereal_yield_scaled = (cereal_yield_kg_ha - min(cereal_yield_kg_ha, na.rm = TRUE)) /
                           (max(cereal_yield_kg_ha, na.rm = TRUE) - min(cereal_yield_kg_ha, na.rm = TRUE)),
 
-    water_use_scaled = (agricultural.Water.withdrawal.per.HA - min(agricultural.Water.withdrawal.per.HA, na.rm = TRUE)) /
-                       (max(agricultural.Water.withdrawal.per.HA, na.rm = TRUE) - min(agricultural.Water.withdrawal.per.HA, na.rm = TRUE))
+    water_use_scaled = (agri_land_share_total_land_pct - min(agri_land_share_total_land_pct, na.rm = TRUE)) /
+                       (max(agri_land_share_total_land_pct, na.rm = TRUE) - min(agri_land_share_total_land_pct, na.rm = TRUE))
   ) %>%
   select(Continent, cereal_yield_scaled, water_use_scaled)
 
@@ -451,13 +451,13 @@ df_long <- df_violin %>%
 
 # Étape 3 : Plot en facette violon par continent et variable
 ggplot(df_long, aes(x = Continent, y = Value, fill = Variable)) +
-  geom_violin(alpha = 0.7, position = position_dodge(0.9), trim = FALSE) +
+  geom_boxplot(alpha = 0.7, position = position_dodge(0.85), trim = FALSE) +
   scale_fill_manual(
-    values = c("cereal_yield_scaled" = "#1f77b4", "water_use_scaled" = "#ff7f0e"),
+    values = c("cereal_yield_scaled" = "#ff7f0e", "water_use_scaled" =  "#1f77b4"),
     labels = c("Cereal Yield", "Water Use")
   ) +
   labs(
-    title = "Distribution of Normalized Cereal Yields and Water Use by Continent",
+    title = "Distribution of Cereal Yields and Water Use by Continent",
     y = "Normalized Value (Min-Max)",
     x = "Continent",
     fill = "Variable"
