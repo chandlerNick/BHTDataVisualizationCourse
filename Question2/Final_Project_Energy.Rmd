@@ -1,0 +1,555 @@
+---
+title: "Question 2"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE
+)
+```
+
+
+
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(fmsb)
+library(tibble)
+library(plotly)
+library(patchwork)
+library(tinytex)
+```
+
+
+```{r}
+#load dataframe
+wfb_df <- read.csv('cleaned_wfb.csv')
+wfb_df <- read.csv('clean_data.csv')
+
+
+### Coal
+
+#function to clean columns related to coal
+clean_coal_column <- function(x) {
+  # Remove text like 'metric tons' and any parentheses content
+  x <- gsub(" metric tons.*", "", x)  # Remove 'metric tons' and anything after it
+  x <- gsub("\\(.*\\)", "", x)         # Remove anything in parentheses like '(2022 est.)'
+  
+  # Convert 'million' to 1e6 and 'billion' to 1e9
+  x <- gsub(" million", "e6", x)      # Convert 'million' to 'e6'
+  x <- gsub(" billion", "e9", x)      # Convert 'billion' to 'e9'
+  x <- gsub(" trillion", "e12", x)      # Convert 'trillion' to 'e12'
+  
+  # Remove any commas and extra spaces
+  x <- gsub(",", "", x)  # Remove commas
+  
+  # Convert to numeric after handling the units
+  return(as.numeric(x))  # Convert the cleaned string to numeric
+}
+
+#Clean column for coal production
+wfb_df$Energy..Coal...production = sapply(wfb_df$Energy..Coal...production, clean_coal_column)
+
+
+#coal in metric tonnes; convert to BTU
+#using 11,500 BTU/lb according to NC State
+wfb_df$Energy..Coal...production = wfb_df$Energy..Coal...production *2204.62*11500
+
+
+#Clean and convert column for Energy..Coal...import
+wfb_df$Energy..Coal...imports = sapply(wfb_df$Energy..Coal...imports, clean_coal_column)
+wfb_df$Energy..Coal...imports = wfb_df$Energy..Coal...imports *2204.62*11500
+
+#Clean and convert column for Energy..Coal...exports
+wfb_df$Energy..Coal...exports = sapply(wfb_df$Energy..Coal...exports, clean_coal_column)
+wfb_df$Energy..Coal...exports = wfb_df$Energy..Coal...exports *2204.62*11500
+
+
+
+### Natural Gas
+
+#function to clean columns related to natural gas
+clean_natural_gas_column <- function(x) {
+  # Remove text like 'cubic meters' and any parentheses content
+  x <- gsub(" cubic meters.*", "", x)  # Remove 'metric tons' and anything after it
+  x <- gsub("\\(.*\\)", "", x)         # Remove anything in parentheses like '(2022 est.)'
+  
+  # Convert 'million' to 1e6 and 'billion' to 1e9
+  x <- gsub(" million", "e6", x)      # Convert 'million' to 'e6'
+  x <- gsub(" billion", "e9", x)      # Convert 'billion' to 'e9'
+  x <- gsub(" trillion", "e12", x)      # Convert 'trillion' to 'e12'
+  
+  # Remove any commas and extra spaces
+  x <- gsub(",", "", x)  # Remove commas
+  
+  # Convert to numeric after handling the units
+  return(as.numeric(x))  # Convert the cleaned string to numeric
+}
+
+#clean column for natural gas production
+wfb_df$Energy..Natural.gas...production = sapply(wfb_df$Energy..Natural.gas...production, clean_natural_gas_column)
+
+
+#natural gas in cubic meters; convert to BTU
+#34,121 BTU/m^3 according to BP
+#i never cleaned this column yet
+wfb_df$Energy..Natural.gas...production = wfb_df$Energy..Natural.gas...production * 34121
+
+
+
+#also clean Natural.gas..imports
+wfb_df$Energy..Natural.gas...imports = sapply(wfb_df$Energy..Natural.gas...imports, clean_natural_gas_column)
+wfb_df$Energy..Natural.gas...imports = wfb_df$Energy..Natural.gas...imports * 34121
+
+# Clean column for Energy..Natural.gas...exports
+wfb_df$Energy..Natural.gas...exports = sapply(wfb_df$Energy..Natural.gas...exports, clean_natural_gas_column)
+wfb_df$Energy..Natural.gas...exports = wfb_df$Energy..Natural.gas...exports * 34121
+
+
+
+### Petroleum
+
+#function to clean columns related to petroleum
+clean_petroleum_column <- function(x) {
+  # Remove text like 'metric tons' and any parentheses content
+  x <- gsub(" bbl/day.*", "", x)  # Remove 'metric tons' and anything after it
+  x <- gsub("\\(.*\\)", "", x)         # Remove anything in parentheses like '(2022 est.)'
+  
+  # Convert 'million' to 1e6 and 'billion' to 1e9
+  x <- gsub(" million", "e6", x)      # Convert 'million' to 'e6'
+  x <- gsub(" billion", "e9", x)      # Convert 'billion' to 'e9'
+  x <- gsub(" trillion", "e12", x)      # Convert 'trillion' to 'e12'
+  
+  # Remove any commas and extra spaces
+  x <- gsub(",", "", x)  # Remove commas
+  
+  # Convert to numeric after handling the units
+  return(as.numeric(x))  # Convert the cleaned string to numeric
+}
+
+#clean columns for petroleum production
+wfb_df$Energy..Petroleum...total.petroleum.production = sapply(wfb_df$Energy..Petroleum...total.petroleum.production, clean_petroleum_column)
+
+#petroleum in barrels per day; convert to BTU
+#5.8e6 BTU per barrel of oil according to BP
+wfb_df$Energy..Petroleum...total.petroleum.production = wfb_df$Energy..Petroleum...total.petroleum.production * 365 * 5.8e6
+
+
+
+#make aggregate of total dirty production
+wfb_df <- wfb_df %>%
+  mutate(total_production = rowSums(select(., Energy..Coal...production, Energy..Natural.gas...production, Energy..Petroleum...total.petroleum.production), na.rm = TRUE))
+
+
+### GDP per capita
+
+#function to clean gdp columns
+clean_gdp_column <- function(x) {
+  # Remove dollar sign and commas
+  x <- gsub("^\\$", "", x)  # Remove the first dollar sign
+  x <- gsub(",", "", x)     # Remove the commas
+  
+  # Remove everything after the first numeric value (remove text like 'est.', etc.)
+  x <- gsub(" .*", "", x)   # Remove everything after the first number
+  
+  # Convert to numeric and return
+  return(as.numeric(x))  # Convert cleaned string to numeric
+}
+
+wfb_df$Economy..Real.GDP.per.capita = sapply(wfb_df$Economy..Real.GDP.per.capita, clean_gdp_column)
+
+
+
+# Consumption
+
+clean_consumption_column <- function(x) {
+  # Remove text like 'metric tons' and any parentheses content
+  x <- gsub(" Btu/person.*", "", x)  # Remove 'metric tons' and anything after it
+  x <- gsub("\\(.*\\)", "", x)         # Remove anything in parentheses like '(2022 est.)'
+  
+  # Convert 'million' to 1e6 and 'billion' to 1e9
+  x <- gsub(" million", "e6", x)      # Convert 'million' to 'e6'
+  x <- gsub(" billion", "e9", x)      # Convert 'billion' to 'e9'
+  x <- gsub(" trillion", "e12", x)      # Convert 'trillion' to 'e12'
+  
+  # Remove any commas and extra spaces
+  x <- gsub(",", "", x)  # Remove commas
+  
+  # Convert to numeric after handling the units
+  return(as.numeric(x))  # Convert the cleaned string to numeric
+}
+
+wfb_df$Energy..Energy.consumption.per.capita = sapply(wfb_df$Energy..Energy.consumption.per.capita, clean_consumption_column)
+
+
+### Population
+clean_population_column <- function(x) {
+  x <- gsub(",", "", x)     # Remove the commas
+
+  # Convert to numeric and return
+  return(as.numeric(x))  # Convert cleaned string to numeric
+}
+
+wfb_df$People.and.Society..Population...total = sapply(wfb_df$People.and.Society..Population...total, clean_population_column)
+
+
+
+### Production/Imports/Exports per capita
+
+wfb_df$Energy..Energy.production.per.capita =
+(wfb_df$total_production)/(wfb_df$People.and.Society..Population...total)
+
+
+wfb_df$Dirty_imports_percapita =
+(wfb_df$Energy..Coal...imports + wfb_df$Energy..Natural.gas...imports)/(wfb_df$People.and.Society..Population...total)
+
+wfb_df$Dirty_exports_percapita =
+(wfb_df$Energy..Coal...exports + wfb_df$Energy..Natural.gas...exports)/(wfb_df$People.and.Society..Population...total)
+
+
+
+### Continents
+
+#wfb_df$Geography..Map.references[wfb_df$Geography..Map.references == "Arctic Region"] <- "Europe"
+#wfb_df$Geography..Map.references[wfb_df$Geography..Map.references == "AsiaEurope"] <- "Europe"
+#wfb_df$Geography..Map.references[wfb_df$Geography..Map.references == "Southeast Asia"] <- "Asia"
+#wfb_df$Geography..Map.references[wfb_df$Geography..Map.references == "Central America and the Caribbean"] <- "South America"
+wfb_df$Geography..Map.references[wfb_df$Country == "France"] <- "Europe"
+wfb_df$Geography..Map.references[wfb_df$Country == "Russia"] <- "Europe"
+#wfb_df$Geography..Map.references[wfb_df$Country == "World"] <- "World"
+wfb_df$Geography..Map.references[wfb_df$Geography..Map.references == "Central America and the Caribbean"] <- "Central America"
+
+
+
+### Electricity/Clean Energy
+# Electricity generating capacity is KW
+# Clean energy sources are given as a percentage of the total electricity generating capacity
+# Electricity imports and exports are in kwh
+
+# Clean electricity capacity columns; Unit is KW; Signifies amount of energy that can be instantaneously produced at max capacity
+wfb_df <- wfb_df %>%
+  mutate(Energy..Electricity...installed.generating.capacity = case_when(
+    grepl("billion", Energy..Electricity...installed.generating.capacity, ignore.case = TRUE) ~
+      as.numeric(sub(" .*", "", Energy..Electricity...installed.generating.capacity)) * 1e9,
+    grepl("million", Energy..Electricity...installed.generating.capacity, ignore.case = TRUE) ~
+      as.numeric(sub(" .*", "", Energy..Electricity...installed.generating.capacity)) * 1e6,
+    TRUE ~ as.numeric(gsub(",", "", sub(" .*", "", Energy..Electricity...installed.generating.capacity)))
+  ))
+
+# Clean solar column
+wfb_df$Energy..Electricity.generation.sources...solar <- as.numeric(
+  sub("%.*", "", wfb_df$Energy..Electricity.generation.sources...solar)
+) / 100
+
+
+# Clean hydroelectricity column
+wfb_df$Energy..Electricity.generation.sources...hydroelectricity <- as.numeric(
+  sub("%.*", "", wfb_df$Energy..Electricity.generation.sources...hydroelectricity)
+) / 100
+
+# Clean biomass column
+wfb_df$Energy..Electricity.generation.sources...biomass.and.waste <- as.numeric(
+  sub("%.*", "", wfb_df$Energy..Electricity.generation.sources...biomass.and.waste)
+) / 100
+
+# Clean nuclear column
+wfb_df$Energy..Electricity.generation.sources...nuclear <- as.numeric(
+  sub("%.*", "", wfb_df$Energy..Electricity.generation.sources...nuclear)
+) / 100
+
+# Clean wind column
+wfb_df$Energy..Electricity.generation.sources...nuclear <- as.numeric(
+  sub("%.*", "", wfb_df$Energy..Electricity.generation.sources...nuclear)
+) / 100
+
+# Clean wind column
+wfb_df$Energy..Electricity.generation.sources...wind <- as.numeric(
+  sub("%.*", "", wfb_df$Energy..Electricity.generation.sources...wind)
+) / 100
+
+#Clean geothermal column
+wfb_df$Energy..Electricity.generation.sources...geothermal <- as.numeric(
+  sub("%.*", "", wfb_df$Energy..Electricity.generation.sources...geothermal)
+) / 100
+
+# Clean tide and wave column
+wfb_df$Energy..Electricity.generation.sources...tide.and.wave <- as.numeric(
+  sub("%.*", "", wfb_df$Energy..Electricity.generation.sources...tide.and.wave)
+) / 100
+
+
+
+#convert percentages of clean energy to capacity in KW
+wfb_df$Energy_solar = wfb_df$Energy..Electricity...installed.generating.capacity * 
+                      (wfb_df$Energy..Electricity.generation.sources...solar)
+
+wfb_df$Energy_hydro = wfb_df$Energy..Electricity...installed.generating.capacity * 
+                      (wfb_df$Energy..Electricity.generation.sources...hydroelectricity)
+
+wfb_df$Energy_biomass = wfb_df$Energy..Electricity...installed.generating.capacity * 
+                      (wfb_df$Energy..Electricity.generation.sources...biomass.and.waste)
+
+wfb_df$Energy_nuclear = wfb_df$Energy..Electricity...installed.generating.capacity * 
+                      (wfb_df$Energy..Electricity.generation.sources...nuclear)
+
+wfb_df$Energy_wind = wfb_df$Energy..Electricity...installed.generating.capacity * 
+                      (wfb_df$Energy..Electricity.generation.sources...wind)
+
+wfb_df$Energy_geothermal = wfb_df$Energy..Electricity...installed.generating.capacity * 
+                      (wfb_df$Energy..Electricity.generation.sources...geothermal)
+
+wfb_df$Energy_tide = wfb_df$Energy..Electricity...installed.generating.capacity * 
+                      (wfb_df$Energy..Electricity.generation.sources...tide.and.wave)
+
+
+#make column for total clean energy capacity in KW
+wfb_df$Total_clean_energy <- rowSums(wfb_df[, c(
+  "Energy_solar",
+  "Energy_hydro",
+  "Energy_biomass",
+  "Energy_nuclear",
+  "Energy_wind",
+  "Energy_geothermal",
+  "Energy_tide"
+)], na.rm = TRUE)
+
+
+#clean column Energy..Electricity...consumption; get rid of million, billions, ...
+#convert kwh to BTU; 1 kwh = 3412.142 BTU
+wfb_df <- wfb_df %>%
+  mutate(Energy..Electricity...consumption = case_when(
+    grepl("trillion", Energy..Electricity...consumption, ignore.case = TRUE) ~
+      as.numeric(sub(" .*", "", Energy..Electricity...consumption)) * 1e12,
+    grepl("billion", Energy..Electricity...consumption, ignore.case = TRUE) ~
+      as.numeric(sub(" .*", "", Energy..Electricity...consumption)) * 1e9,
+    grepl("million", Energy..Electricity...consumption, ignore.case = TRUE) ~
+      as.numeric(sub(" .*", "", Energy..Electricity...consumption)) * 1e6,
+    TRUE ~ as.numeric(gsub(",", "", sub(" .*", "", Energy..Electricity...consumption)))
+  ))
+
+#convert Electricity consumption to BTU
+wfb_df$Energy..Electricity...consumption = wfb_df$Energy..Electricity...consumption * 3412.142
+
+# make consumption and production per capita; not consumption is in BTU, production is generating capacity in KW
+wfb_df$Electricity_consumption_percapita = (wfb_df$Energy..Electricity...consumption)/(wfb_df$People.and.Society..Population...total)
+
+wfb_df$Clean_energy_production_percapita = 
+(wfb_df$Total_clean_energy)/(wfb_df$People.and.Society..Population...total)
+
+
+# Clean columns for Electricity imports and exports
+#imports
+wfb_df <- wfb_df %>%
+  mutate(Energy..Electricity...imports = case_when(
+    grepl("billion", Energy..Electricity...imports, ignore.case = TRUE) ~
+      as.numeric(sub(" .*", "", Energy..Electricity...imports)) * 1e9,
+    grepl("million", Energy..Electricity...imports, ignore.case = TRUE) ~
+      as.numeric(sub(" .*", "", Energy..Electricity...imports)) * 1e6,
+    TRUE ~ as.numeric(gsub(",", "", sub(" .*", "", Energy..Electricity...imports)))
+  ))
+
+#exports
+wfb_df <- wfb_df %>%
+  mutate(Energy..Electricity...exports = case_when(
+    grepl("billion", Energy..Electricity...exports, ignore.case = TRUE) ~
+      as.numeric(sub(" .*", "", Energy..Electricity...exports)) * 1e9,
+    grepl("million", Energy..Electricity...exports, ignore.case = TRUE) ~
+      as.numeric(sub(" .*", "", Energy..Electricity...exports)) * 1e6,
+    TRUE ~ as.numeric(gsub(",", "", sub(" .*", "", Energy..Electricity...exports)))
+  ))
+
+# make imports per capita
+wfb_df$Electricity_imports_percapita = 
+(wfb_df$Energy..Electricity...imports)/(wfb_df$People.and.Society..Population...total)
+#make exports per capits
+wfb_df$Electricity_exports_percapita = 
+(wfb_df$Energy..Electricity...exports)/(wfb_df$People.and.Society..Population...total)
+
+#convert kwh to BTU
+wfb_df$Electricity_imports_percapita_btu = wfb_df$Electricity_imports_percapita * 3412.142
+
+wfb_df$Electricity_exports_percapita_btu = wfb_df$Electricity_exports_percapita * 3412.142
+
+#make aggregates
+wfb_df$Total_energy_imports_percapita = wfb_df$Dirty_imports_percapita + wfb_df$Electricity_imports_percapita_btu
+
+wfb_df$Total_energy_exports_percapita = wfb_df$Dirty_exports_percapita + wfb_df$Electricity_exports_percapita_btu
+
+```
+
+### Introduction
+In this section we explore the question, "How do countries' energy profiles impact their economy?"  
+
+
+### Dirty Energy
+We first investigate countries energy profiles in relation to "dirty" energy. By "dirty" energy, we mean energy derived from petroleum, natural gas, and coal. We investigate both the amount of dirty energy that is produced and consumed. We then relate these characteristics to GDP per capita.  
+
+For data preparation, each source of dirty energy was measured in its own units. These were converted to BTU(British Thermal Unit). 1 BTU is equivalent to the energy in a single match. This allowed us to directly compare and aggregate the different types of energy. Note that gdp per capita in our data represents the real gdp calculated in US Dollars in 2023. By real gdp, we mean the purchase power parity.
+
+
+```{r, fig.width=10, fig.height=6}
+custom_labels <- c(
+  "Energy..Coal...production" = "Coal",
+  "Energy..Petroleum...total.petroleum.production" = "Petroleum",
+  "Energy..Natural.gas...production" = "Natural Gas"
+)
+
+# Create long format and filter out NA production
+long_df <- wfb_df %>%
+  filter(Geography..Map.references != "World") %>%
+  pivot_longer(
+    cols = c(
+      Energy..Coal...production,
+      Energy..Petroleum...total.petroleum.production,
+      Energy..Natural.gas...production
+    ),
+    names_to = "Energy_Source",
+    values_to = "Production"
+  ) %>%
+  drop_na(Production)  # <--- this filters out rows where Production is NA
+
+# Plot
+ggplot(long_df, aes(
+  x = Geography..Map.references,
+  y = Production,
+  fill = Energy_Source
+)) +
+  geom_col(position = "dodge") +
+  labs(
+    x = "Continent",
+    y = "Production (BTU)",
+    title = "Energy Production by Type and Continent",
+    fill = "Energy Source"
+  ) +
+  scale_fill_manual(values = c(
+    "Energy..Coal...production" = "#1b9e77",
+    "Energy..Petroleum...total.petroleum.production" = "#d95f02",
+    "Energy..Natural.gas...production" = "#7570b3"
+  ),
+  labels = custom_labels)+
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+First, we wanted to get a general overview of the amount of dirty energy produced. Here, we can see that Asia produces the majority of dirty energy by means of coal production. China, India are the top two producers of coal. North America is the largest producer of petroleum and natural gas. This is because The United States is the world's largest producer of both petroleum and natural gas. Meanwhile, Russia is the second largest producer of natural gas and petroleum. They are also the fifth largest producer of coal, and Russia accounts for the majority of dirty energy production in Europe. Also of note is the Middle East which is the second largest producer of petroleum by continent. Lastly, we see that Africa, South America, and Southeast Asia produce little energy considering their size. 
+
+
+
+```{r}
+#change 'size' parameter for different modes of production
+#Choose from: 'total_production', 'Energy..Energy.production.per.capita', 'Energy..Coal...production', Energy..Petroleum...total.petroleum.production", or 'Energy..Natural.gas...production' columns 
+
+wfb_df$Label <- ifelse(wfb_df$Energy..Energy.production.per.capita > 600000000, wfb_df$Country, NA)
+
+
+ggplot(wfb_df, aes(
+  x = Economy..Real.GDP.per.capita,
+  y = Energy..Energy.consumption.per.capita,
+  size = Energy..Energy.production.per.capita,
+  label = Label,
+  color = Geography..Map.references
+)) +
+  geom_point(alpha = 0.7) +
+  geom_text(check_overlap = TRUE, size = 3, vjust = -1, show.legend = FALSE, na.rm = TRUE) +
+  scale_color_brewer(palette = "Set1") +
+  scale_size_continuous(range = c(2, 12)) +
+  theme_minimal() +
+  theme(
+    legend.key.size = unit(0.4, "cm"),
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 9),
+    legend.spacing.y = unit(0.2, "cm")
+  ) +
+  labs(
+    x = "Real GDP per Capita",
+    y = "Consumption per Capita (BTU)",
+    size = "Total Production (BTU)",
+    title = "Dirty Energy with Respect to GDP"
+  ) +
+  xlim(0, 140000) +
+  ylim(0, 800000000)
+
+```
+Next, we examine how these energy profiles relate to gdp per capita. Specifically, we look at how consumption changes in relation to gdp per capita, and we additionally observe the total production of each country based on the size of the bubbles. The graph has some linearity especially among countries who are not large producers. For large producers, we observe an additional trend. It seems that countries who produce alot of dirty energy also tend to consume alot. For example, we see the Turkmenistan has a relatively low gdp per capita, yet they are large consumers of dirty energy likely dut to their large production. We see two countries going against the trend. Norway is a relatively large producer of petroleum, yet they consume less than Turkmenistan. Finally, we note that Guyana consumes less than some other South American countries despite being the largest producer in the continent, prducing 100 times as much per capita compared to Columbia, the second largest producer.
+
+
+## "Clean" Energy
+We now consider the "clean" energy profiles of different countries. By clean, we mean energy produced by solar, hydroelectricity, nuclear, wind, biomass, geothermal, or tides and waves. Again, we also consider how this relates to gdp per capita. Additionally, we consider the amount of dirty energy imports and exports related to clean energy production.  
+
+Sources of clean energy were only given as percentages of a countries total electricity generating capacity in kW. This represents the amount of energy that can be instantaneously produced at any given time if all electricity generating sources in the country are operating at full capacity. The productive capacity from clean energy source was also converted to kW.
+
+
+```{r}
+# Prepare the data: group by continent and summarize
+
+energy_summary <- wfb_df %>%
+  filter(Geography..Map.references != "World") %>%
+  group_by(Geography..Map.references) %>%
+  summarise(
+    Installed_Capacity = sum(Energy..Electricity...installed.generating.capacity, na.rm = TRUE),
+    Clean_Energy = sum(Total_clean_energy, na.rm = TRUE)
+  ) %>%
+  pivot_longer(
+    cols = c(Installed_Capacity, Clean_Energy),
+    names_to = "Energy_Type",
+    values_to = "Capacity"
+  )
+
+# Plot grouped bar chart
+ggplot(energy_summary, aes(x = Geography..Map.references, y = Capacity, fill = Energy_Type)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  labs(
+    title = "Total Electricity vs Clean Energy Capacity by Continent",
+    x = "Continent",
+    y = "Electricity Generating Capacity (kW)",
+    fill = "Energy Type"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+We first examined the total electricity generating capacity of continents compared to the total sources of clean energy production. We see that although Asia has the highest overall capacity, they are also the largest producer of clean energy. Europe and North America share strikingly similar profiles with Europe producing the second highest amount of clean energy in the world. Also of note is South America who produces the majority of their electricity through clean sources. 
+
+
+```{r}
+wfb_df$Dirty_exports_percapita_log <- log10(wfb_df$Dirty_exports_percapita)
+wfb_df$Economy..Real.GDP.per.capita_log <- log10(wfb_df$Economy..Real.GDP.per.capita)
+
+ggplot(wfb_df, aes(
+  x = Economy..Real.GDP.per.capita,
+  y = Dirty_exports_percapita_log,
+  size = Clean_energy_production_percapita,
+  label = Country,
+  color = Geography..Map.references
+)) +
+  geom_point(alpha = 0.7) +
+  geom_text(check_overlap = TRUE, size = 3, vjust = -1, show.legend = FALSE) +
+  scale_color_brewer(palette = "Set1") +
+  scale_size_continuous(range = c(2, 12)) +
+  theme_minimal() +
+  theme(
+    legend.key.size = unit(0.4, "cm"),       # shrink legend key box
+    legend.text = element_text(size = 8),    # smaller text
+    legend.title = element_text(size = 9),   # smaller title
+    legend.spacing.y = unit(0.2, "cm")       # tighter spacing
+  ) +
+  labs(
+    x = "Real GDP per Capita",
+    y = "Dirty Exports per Capita (BTU)",
+    size = "Clean Energy Production per Capita (kW)",
+    title = "Clean and Dirty Energy with Respect to GDP"
+  ) +
+  xlim(0, 140000) +
+  ylim(3.5, 10)
+#quatar is outlier
+
+```
+
+We now turn our attention to the connection to gdp percapita while also considering countries imports and exports. Note that the y-axis, Dirty Exports per Capita(BTU), is log scaled. Here we observe some correlation between gdp per capita and exports. This is likely because exporting dirty energy is a lucrative business. We also see that wealthier countries produce more clean energy in general. Maybe because the have more wealth to invest into new energy infrastructure. We also note that South American countries produce as much clean energy as countries with larger gdp. Norway is the largest producer of clean energy per capita, yet they are also one of the highest exporters of dirty energy. In general, we see that countries who are producing large amounts of clean energy may still be producing and exporting large amounts of dirty energy. Therefore, they are still contributing to the overall use of dirty energy worldwide.
+
+### Conclusion
+We conclude that a countries energy profile has a significant impact on their economy. Wealthier countries typically enjoy larger consumption rate. They are also better enabled to produce clean energy reducing dependence on fossil fuels. Countries who produce large amounts of dirty energy also see a positive benefit to their gdp, in part due to their ability to export their resources.

@@ -1,0 +1,435 @@
+---
+title: "energy_1"
+output: html_document
+date: "2025-04-30"
+---
+
+Create graphs related to energy
+-Relate gdp/cap to energy prduction and consumption
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+```
+
+
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(fmsb)
+library(tibble)
+library(plotly)
+```
+
+
+Load Data
+
+```{r}
+wfb_df <- read.csv('cleaned_wfb.csv')
+head(wfb_df)
+```
+
+
+
+Clean Energy..Coal...production and convert to numeric
+Convert metric tons to BTU
+
+```{r}
+head(wfb_df$Energy..Coal...production)
+
+clean_coal_column <- function(x) {
+  # Remove text like 'metric tons' and any parentheses content
+  x <- gsub(" metric tons.*", "", x)  # Remove 'metric tons' and anything after it
+  x <- gsub("\\(.*\\)", "", x)         # Remove anything in parentheses like '(2022 est.)'
+  
+  # Convert 'million' to 1e6 and 'billion' to 1e9
+  x <- gsub(" million", "e6", x)      # Convert 'million' to 'e6'
+  x <- gsub(" billion", "e9", x)      # Convert 'billion' to 'e9'
+  x <- gsub(" trillion", "e12", x)      # Convert 'trillion' to 'e12'
+  
+  # Remove any commas and extra spaces
+  x <- gsub(",", "", x)  # Remove commas
+  
+  # Convert to numeric after handling the units
+  return(as.numeric(x))  # Convert the cleaned string to numeric
+}
+
+wfb_df$Energy..Coal...production = sapply(wfb_df$Energy..Coal...production, clean_coal_column)
+
+head(wfb_df$Energy..Coal...production)
+
+#coal in metric tonnes
+#using 11,500 BTU/lb according to NC State
+wfb_df$Energy..Coal...production = wfb_df$Energy..Coal...production *2204.62*11500
+```
+
+
+
+Clean Energy..Natural.gas...production and convert to numeric
+Convert cubic meters to BTU
+
+
+```{r}
+#Clean Energy..Natural.gas...production and convert to numeric
+head(wfb_df$Energy..Natural.gas...production)
+
+clean_natural_gas_column <- function(x) {
+  # Remove text like 'cubic meters' and any parentheses content
+  x <- gsub(" cubic meters.*", "", x)  # Remove 'metric tons' and anything after it
+  x <- gsub("\\(.*\\)", "", x)         # Remove anything in parentheses like '(2022 est.)'
+  
+  # Convert 'million' to 1e6 and 'billion' to 1e9
+  x <- gsub(" million", "e6", x)      # Convert 'million' to 'e6'
+  x <- gsub(" billion", "e9", x)      # Convert 'billion' to 'e9'
+  x <- gsub(" trillion", "e12", x)      # Convert 'trillion' to 'e12'
+  
+  # Remove any commas and extra spaces
+  x <- gsub(",", "", x)  # Remove commas
+  
+  # Convert to numeric after handling the units
+  return(as.numeric(x))  # Convert the cleaned string to numeric
+}
+
+wfb_df$Energy..Natural.gas...production = sapply(wfb_df$Energy..Natural.gas...production, clean_natural_gas_column)
+
+head(wfb_df$Energy..Natural.gas...production)
+
+#natural gas in cubic meters
+#34,121 BTU/m^3 according to BP
+#i never cleaned this column yet
+wfb_df$Energy..Natural.gas...production = wfb_df$Energy..Natural.gas...production * 34121
+```
+
+
+
+
+Clean Energy..Petroleum.total.petroleum.production and convert to numeric
+Convert bbl/day to BTU
+```{r}
+#Clean Energy..Petroleum...total.petroleum.production and convert to numeric
+head(wfb_df$Energy..Petroleum...total.petroleum.production)
+
+clean_petroleum_column <- function(x) {
+  # Remove text like 'metric tons' and any parentheses content
+  x <- gsub(" bbl/day.*", "", x)  # Remove 'metric tons' and anything after it
+  x <- gsub("\\(.*\\)", "", x)         # Remove anything in parentheses like '(2022 est.)'
+  
+  # Convert 'million' to 1e6 and 'billion' to 1e9
+  x <- gsub(" million", "e6", x)      # Convert 'million' to 'e6'
+  x <- gsub(" billion", "e9", x)      # Convert 'billion' to 'e9'
+  x <- gsub(" trillion", "e12", x)      # Convert 'trillion' to 'e12'
+  
+  # Remove any commas and extra spaces
+  x <- gsub(",", "", x)  # Remove commas
+  
+  # Convert to numeric after handling the units
+  return(as.numeric(x))  # Convert the cleaned string to numeric
+}
+
+wfb_df$Energy..Petroleum...total.petroleum.production = sapply(wfb_df$Energy..Petroleum...total.petroleum.production, clean_petroleum_column)
+
+head(wfb_df$Energy..Petroleum...total.petroleum.production)
+
+
+#petroleum in barrels per day
+#5.8e6 BTU per barrel of oil according to BP
+wfb_df$Energy..Petroleum...total.petroleum.production = wfb_df$Energy..Petroleum...total.petroleum.production * 365 * 5.8e6
+```
+
+Make aggregate of production(coal+natural_gas+petroleum)
+```{r}
+#make aggregate of production
+wfb_df <- wfb_df %>%
+  mutate(total_production = rowSums(select(., Energy..Coal...production, Energy..Natural.gas...production, Energy..Petroleum...total.petroleum.production), na.rm = TRUE))
+head(wfb_df$total_production)
+```
+
+Clean GDP per capita column
+
+```{r}
+#Clean and convert column: Economy..Real.GDP.per.capita
+head(wfb_df$Economy..Real.GDP.per.capita)
+
+clean_gdp_column <- function(x) {
+  # Remove dollar sign and commas
+  x <- gsub("^\\$", "", x)  # Remove the first dollar sign
+  x <- gsub(",", "", x)     # Remove the commas
+  
+  # Remove everything after the first numeric value (remove text like 'est.', etc.)
+  x <- gsub(" .*", "", x)   # Remove everything after the first number
+  
+  # Convert to numeric and return
+  return(as.numeric(x))  # Convert cleaned string to numeric
+}
+
+wfb_df$Economy..Real.GDP.per.capita = sapply(wfb_df$Economy..Real.GDP.per.capita, clean_gdp_column)
+
+head(wfb_df$Economy..Real.GDP.per.capita)
+```
+
+
+Clean column: Energy Consumption per capita
+
+```{r}
+#Clean and convert Energy..Energy.consumption.per.capita column
+head(wfb_df$Energy..Energy.consumption.per.capita)
+
+clean_consumption_column <- function(x) {
+  # Remove text like 'metric tons' and any parentheses content
+  x <- gsub(" Btu/person.*", "", x)  # Remove 'metric tons' and anything after it
+  x <- gsub("\\(.*\\)", "", x)         # Remove anything in parentheses like '(2022 est.)'
+  
+  # Convert 'million' to 1e6 and 'billion' to 1e9
+  x <- gsub(" million", "e6", x)      # Convert 'million' to 'e6'
+  x <- gsub(" billion", "e9", x)      # Convert 'billion' to 'e9'
+  x <- gsub(" trillion", "e12", x)      # Convert 'trillion' to 'e12'
+  
+  # Remove any commas and extra spaces
+  x <- gsub(",", "", x)  # Remove commas
+  
+  # Convert to numeric after handling the units
+  return(as.numeric(x))  # Convert the cleaned string to numeric
+}
+
+wfb_df$Energy..Energy.consumption.per.capita = sapply(wfb_df$Energy..Energy.consumption.per.capita, clean_consumption_column)
+
+
+head(wfb_df$Energy..Energy.consumption.per.capita)
+```
+
+Clean column: People.and.Society..Population...total
+```{r}
+head(wfb_df$People.and.Society..Population...total)
+
+clean_population_column <- function(x) {
+  x <- gsub(",", "", x)     # Remove the commas
+
+  # Convert to numeric and return
+  return(as.numeric(x))  # Convert cleaned string to numeric
+}
+
+wfb_df$People.and.Society..Population...total = sapply(wfb_df$People.and.Society..Population...total, clean_population_column)
+
+head(wfb_df$People.and.Society..Population...total)
+```
+
+Scale energy production to per capita. Save in column: Energy..Energy.production.per.capita
+
+```{r}
+wfb_df$Energy..Energy.production.per.capita =
+(wfb_df$total_production)/(wfb_df$People.and.Society..Population...total)
+
+head(wfb_df$Energy..Energy.production.per.capita)
+```
+
+Fix continent names
+```{r}
+wfb_df$Geography..Map.references[wfb_df$Geography..Map.references == "Arctic Region"] <- "Europe"
+wfb_df$Geography..Map.references[wfb_df$Geography..Map.references == "AsiaEurope"] <- "Europe"
+wfb_df$Geography..Map.references[wfb_df$Geography..Map.references == "Southeast Asia"] <- "Asia"
+wfb_df$Geography..Map.references[wfb_df$Geography..Map.references == "Central America and the Caribbean"] <- "South America"
+wfb_df$Geography..Map.references[wfb_df$Country == "France"] <- "Europe"
+
+wfb_df$Geography..Map.references[wfb_df$Country == "World"] <- "World"
+```
+
+
+Make graph
+
+```{r}
+#change 'size' parameter for different modes of production
+#Choose from: 'total_production', 'Energy..Energy.production.per.capita', 'Energy..Coal...production', Energy..Petroleum...total.petroleum.production", or 'Energy..Natural.gas...production' columns 
+ggplot(wfb_df, aes(
+  x = Economy..Real.GDP.per.capita,
+  y = Energy..Energy.consumption.per.capita,
+  size = total_production,
+  label = Country,
+  color = Geography..Map.references
+)) +
+  geom_point(alpha = 0.7) +
+  geom_text(check_overlap = TRUE, size = 3, vjust = -1, show.legend = FALSE) +
+  scale_color_brewer(palette = "Set1") +
+  scale_size_continuous(range = c(2, 12)) +  # adjust bubble sizes
+  theme_minimal() +
+  labs(
+    x = "Real GDP per Capita",
+    y = "Consumption per Capita (BTU)",
+    size = "Total Production (BTU)",
+    title = ""
+  ) +
+  xlim(0, 100000) +  # Set the x-axis limit (example: 0 to 50000)
+  ylim(0, 350000000)     # Set the y-axis limit (example: 0 to 5000)
+
+```
+
+```{r}
+p <- ggplot(wfb_df, aes(
+  x = Economy..Real.GDP.per.capita,
+  y = Energy..Energy.consumption.per.capita,
+  size = Energy..Energy.production.per.capita,
+  text = Country,
+  color = Geography..Map.references
+)) +
+  geom_point(alpha = 0.7) +
+  scale_color_brewer(palette = "Set1") +
+  scale_size_continuous(range = c(2, 12)) +  # adjust bubble sizes
+  theme_minimal() +
+  labs(
+    x = "Real GDP per Capita",
+    y = "Consumption per Capita (BTU)",
+    size = "Production per Capita (BTU)",
+    title = ""
+  ) +
+  xlim(0, 100000) +  # Set the x-axis limit (example: 0 to 50000)
+  ylim(0, 350000000)     # Set the y-axis limit (example: 0 to 5000)
+
+ggplotly(p, tooltip = "text")
+```
+
+
+Grouped bar charts showing what type of energy is being produced by each continent
+```{r}
+long_df <- wfb_df %>%
+  pivot_longer(
+    cols = c(
+      'Energy..Coal...production',
+      'Energy..Petroleum...total.petroleum.production',
+      'Energy..Natural.gas...production'
+    ),
+    names_to = "Energy_Source",
+    values_to = "Production"
+  )
+
+# Filter out the "World" row
+long_df <- long_df %>% filter(`Geography..Map.references` != "World")
+
+
+ggplot(long_df, aes(
+  x = `Geography..Map.references`,  # your "continent" column
+  y = Production,
+  fill = Energy_Source
+)) +
+  geom_col(position = "dodge") +
+  labs(
+    x = "Continent",
+    y = "Production (BTU)",
+    title = "Energy Production by Type and Continent",
+    fill = "Energy Source"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+Spider plots
+```{r}
+# Select relevant columns
+energy_df <- wfb_df %>%
+  select(
+    Continent = `Geography..Map.references`,
+    Coal = `Energy..Coal...production`,
+    Petroleum = `Energy..Petroleum...total.petroleum.production`,
+    Gas = `Energy..Natural.gas...production`
+  ) %>%
+  group_by(Continent) %>%
+  summarise(across(everything(), ~sum(.x, na.rm = TRUE)))
+
+#for each continent
+continents <- unique(wfb_df$Geography..Map.references)
+continents <- setdiff(continents, "World")
+
+for (continent in continents){
+  continent_data <- energy_df %>% filter(Continent == continent) %>% select(-Continent)
+  
+  # Add max and min rows as required by fmsb
+  max_min <- data.frame(
+    Coal = c(max(energy_df$Coal), 0),
+    Petroleum = c(max(energy_df$Petroleum), 0),
+    Gas = c(max(energy_df$Gas), 0)
+  )
+  
+  radar_data <- rbind(max_min, continent_data)
+  
+  # Plot the radar chart
+  radarchart(radar_data, axistype = 1,
+             pcol = "blue", pfcol = scales::alpha("blue", 0.3), plwd = 2,
+             cglcol = "grey", cglty = 1, axislabcol = "grey", caxislabels = NULL,
+             title = paste("Energy Production Profile:", continent))
+}
+
+```
+
+
+```{r}
+continent_energy <- wfb_df %>%
+  filter(Geography..Map.references != "World") %>%  
+  group_by(Geography..Map.references) %>%
+  summarise(
+    Coal = sum(Energy..Coal...production, na.rm = TRUE),
+    Petroleum = sum(Energy..Petroleum...total.petroleum.production, na.rm = TRUE),
+    Gas = sum(Energy..Natural.gas...production, na.rm = TRUE)
+  )
+
+
+
+# Ensure the continent is the row names and transpose the data (this is critical for fmsb)
+continent_energy <- as.data.frame(continent_energy)
+row.names(continent_energy) <- continent_energy$Geography..Map.references
+continent_energy <- continent_energy[, -1]  # Remove the Continent column
+
+normalize <- function(x) (x - min(x)) / (max(x) - min(x))
+continent_energy_normalized <- as.data.frame(lapply(continent_energy, normalize))
+
+rownames(continent_energy_normalized) <- rownames(continent_energy)
+
+###individual spider plots by production type
+energy_types <- colnames(continent_energy_normalized)
+for (type in energy_types) {
+
+  data_vector <- continent_energy_normalized[, type, drop = FALSE]
+  
+  rownames(data_vector) <- rownames(continent_energy_normalized)
+
+  # Create max-min rows required by fmsb
+  radar_data <- rbind(rep(1, nrow(data_vector)), rep(0, nrow(data_vector)), t(data_vector))
+  radar_data <- as.data.frame(radar_data)
+  # Plot
+  radarchart(radar_data,
+             axistype = 1,
+             title = paste("Normalized", type, "Production by Continent"),
+             pcol = "darkgreen", pfcol = scales::alpha("green", 0.3), plwd = 2,
+             cglcol = "grey", cglty = 1, axislabcol = "grey")
+}
+
+###one plot with each type overlayed
+# Transpose the data so that each energy type (Coal, Petroleum, Gas) is a row
+continent_energy_normalized <- t(continent_energy_normalized)
+
+# Add required max and min rows for fmsb radar chart (max value and 0)
+max_vals <- apply(continent_energy_normalized, 1, max)  # Get max value for each energy type
+min_vals <- rep(0, length(max_vals))         # Create a vector of 0s for min values
+
+# Combine max, min, and actual data
+radar_data <- rbind(max_vals, min_vals, continent_energy_normalized)
+
+# Convert the matrix to a data frame
+radar_data <- as.data.frame(radar_data)
+
+# Plot the radar chart with fmsb
+radarchart(radar_data, axistype = 1,
+           pcol = c("red", "green", "blue"), 
+           pfcol = scales::alpha(c("red", "green", "blue"), 0.3),
+           plwd = 2,
+           cglcol = "grey", cglty = 1, axislabcol = "grey",
+           title = "Energy Production by Continent")
+
+# Add legend
+legend("topright", legend = rownames(continent_energy_normalized), 
+       col = c("red", "green", "blue"), lty = 1, bty = "n")
+
+```
