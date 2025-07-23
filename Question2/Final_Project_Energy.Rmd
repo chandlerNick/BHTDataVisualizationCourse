@@ -1,21 +1,18 @@
 ---
-title: "Final_Project_Energy"
-output: html_document
-date: "2025-07-22"
+title: "Question 2"
+output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE
+)
 ```
 
 
 
-
-
-## Including Plots
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
 
 ```{r}
 library(ggplot2)
@@ -24,16 +21,15 @@ library(tidyr)
 library(fmsb)
 library(tibble)
 library(plotly)
+library(patchwork)
+library(tinytex)
 ```
 
-## Introduction
-We want to find out if the energy profiles of different countries is related to GDP.
-
-## Data Cleaning
 
 ```{r}
 #load dataframe
 wfb_df <- read.csv('cleaned_wfb.csv')
+wfb_df <- read.csv('clean_data.csv')
 
 
 ### Coal
@@ -219,13 +215,14 @@ wfb_df$Dirty_exports_percapita =
 
 ### Continents
 
-wfb_df$Geography..Map.references[wfb_df$Geography..Map.references == "Arctic Region"] <- "Europe"
-wfb_df$Geography..Map.references[wfb_df$Geography..Map.references == "AsiaEurope"] <- "Europe"
-wfb_df$Geography..Map.references[wfb_df$Geography..Map.references == "Southeast Asia"] <- "Asia"
-wfb_df$Geography..Map.references[wfb_df$Geography..Map.references == "Central America and the Caribbean"] <- "South America"
+#wfb_df$Geography..Map.references[wfb_df$Geography..Map.references == "Arctic Region"] <- "Europe"
+#wfb_df$Geography..Map.references[wfb_df$Geography..Map.references == "AsiaEurope"] <- "Europe"
+#wfb_df$Geography..Map.references[wfb_df$Geography..Map.references == "Southeast Asia"] <- "Asia"
+#wfb_df$Geography..Map.references[wfb_df$Geography..Map.references == "Central America and the Caribbean"] <- "South America"
 wfb_df$Geography..Map.references[wfb_df$Country == "France"] <- "Europe"
-
-wfb_df$Geography..Map.references[wfb_df$Country == "World"] <- "World"
+wfb_df$Geography..Map.references[wfb_df$Country == "Russia"] <- "Europe"
+#wfb_df$Geography..Map.references[wfb_df$Country == "World"] <- "World"
+wfb_df$Geography..Map.references[wfb_df$Geography..Map.references == "Central America and the Caribbean"] <- "Central America"
 
 
 
@@ -385,3 +382,174 @@ wfb_df$Total_energy_exports_percapita = wfb_df$Dirty_exports_percapita + wfb_df$
 
 ```
 
+### Introduction
+In this section we explore the question, "How do countries' energy profiles impact their economy?"  
+
+
+### Dirty Energy
+We first investigate countries energy profiles in relation to "dirty" energy. By "dirty" energy, we mean energy derived from petroleum, natural gas, and coal. We investigate both the amount of dirty energy that is produced and consumed. We then relate these characteristics to GDP per capita.  
+
+For data preparation, each source of dirty energy was measured in its own units. These were converted to BTU(British Thermal Unit). 1 BTU is equivalent to the energy in a single match. This allowed us to directly compare and aggregate the different types of energy. Note that gdp per capita in our data represents the real gdp calculated in US Dollars in 2023. By real gdp, we mean the purchase power parity.
+
+
+```{r, fig.width=10, fig.height=6}
+custom_labels <- c(
+  "Energy..Coal...production" = "Coal",
+  "Energy..Petroleum...total.petroleum.production" = "Petroleum",
+  "Energy..Natural.gas...production" = "Natural Gas"
+)
+
+# Create long format and filter out NA production
+long_df <- wfb_df %>%
+  filter(Geography..Map.references != "World") %>%
+  pivot_longer(
+    cols = c(
+      Energy..Coal...production,
+      Energy..Petroleum...total.petroleum.production,
+      Energy..Natural.gas...production
+    ),
+    names_to = "Energy_Source",
+    values_to = "Production"
+  ) %>%
+  drop_na(Production)  # <--- this filters out rows where Production is NA
+
+# Plot
+ggplot(long_df, aes(
+  x = Geography..Map.references,
+  y = Production,
+  fill = Energy_Source
+)) +
+  geom_col(position = "dodge") +
+  labs(
+    x = "Continent",
+    y = "Production (BTU)",
+    title = "Energy Production by Type and Continent",
+    fill = "Energy Source"
+  ) +
+  scale_fill_manual(values = c(
+    "Energy..Coal...production" = "#1b9e77",
+    "Energy..Petroleum...total.petroleum.production" = "#d95f02",
+    "Energy..Natural.gas...production" = "#7570b3"
+  ),
+  labels = custom_labels)+
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+First, we wanted to get a general overview of the amount of dirty energy produced. Here, we can see that Asia produces the majority of dirty energy by means of coal production. China, India are the top two producers of coal. North America is the largest producer of petroleum and natural gas. This is because The United States is the world's largest producer of both petroleum and natural gas. Meanwhile, Russia is the second largest producer of natural gas and petroleum. They are also the fifth largest producer of coal, and Russia accounts for the majority of dirty energy production in Europe. Also of note is the Middle East which is the second largest producer of petroleum by continent. Lastly, we see that Africa, South America, and Southeast Asia produce little energy considering their size. 
+
+
+
+```{r}
+#change 'size' parameter for different modes of production
+#Choose from: 'total_production', 'Energy..Energy.production.per.capita', 'Energy..Coal...production', Energy..Petroleum...total.petroleum.production", or 'Energy..Natural.gas...production' columns 
+
+wfb_df$Label <- ifelse(wfb_df$Energy..Energy.production.per.capita > 600000000, wfb_df$Country, NA)
+
+
+ggplot(wfb_df, aes(
+  x = Economy..Real.GDP.per.capita,
+  y = Energy..Energy.consumption.per.capita,
+  size = Energy..Energy.production.per.capita,
+  label = Label,
+  color = Geography..Map.references
+)) +
+  geom_point(alpha = 0.7) +
+  geom_text(check_overlap = TRUE, size = 3, vjust = -1, show.legend = FALSE, na.rm = TRUE) +
+  scale_color_brewer(palette = "Set1") +
+  scale_size_continuous(range = c(2, 12)) +
+  theme_minimal() +
+  theme(
+    legend.key.size = unit(0.4, "cm"),
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 9),
+    legend.spacing.y = unit(0.2, "cm")
+  ) +
+  labs(
+    x = "Real GDP per Capita",
+    y = "Consumption per Capita (BTU)",
+    size = "Total Production (BTU)",
+    title = "Dirty Energy with Respect to GDP"
+  ) +
+  xlim(0, 140000) +
+  ylim(0, 800000000)
+
+```
+Next, we examine how these energy profiles relate to gdp per capita. Specifically, we look at how consumption changes in relation to gdp per capita, and we additionally observe the total production of each country based on the size of the bubbles. The graph has some linearity especially among countries who are not large producers. For large producers, we observe an additional trend. It seems that countries who produce alot of dirty energy also tend to consume alot. For example, we see the Turkmenistan has a relatively low gdp per capita, yet they are large consumers of dirty energy likely dut to their large production. We see two countries going against the trend. Norway is a relatively large producer of petroleum, yet they consume less than Turkmenistan. Finally, we note that Guyana consumes less than some other South American countries despite being the largest producer in the continent, prducing 100 times as much per capita compared to Columbia, the second largest producer.
+
+
+## "Clean" Energy
+We now consider the "clean" energy profiles of different countries. By clean, we mean energy produced by solar, hydroelectricity, nuclear, wind, biomass, geothermal, or tides and waves. Again, we also consider how this relates to gdp per capita. Additionally, we consider the amount of dirty energy imports and exports related to clean energy production.  
+
+Sources of clean energy were only given as percentages of a countries total electricity generating capacity in kW. This represents the amount of energy that can be instantaneously produced at any given time if all electricity generating sources in the country are operating at full capacity. The productive capacity from clean energy source was also converted to kW.
+
+
+```{r}
+# Prepare the data: group by continent and summarize
+
+energy_summary <- wfb_df %>%
+  filter(Geography..Map.references != "World") %>%
+  group_by(Geography..Map.references) %>%
+  summarise(
+    Installed_Capacity = sum(Energy..Electricity...installed.generating.capacity, na.rm = TRUE),
+    Clean_Energy = sum(Total_clean_energy, na.rm = TRUE)
+  ) %>%
+  pivot_longer(
+    cols = c(Installed_Capacity, Clean_Energy),
+    names_to = "Energy_Type",
+    values_to = "Capacity"
+  )
+
+# Plot grouped bar chart
+ggplot(energy_summary, aes(x = Geography..Map.references, y = Capacity, fill = Energy_Type)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  labs(
+    title = "Total Electricity vs Clean Energy Capacity by Continent",
+    x = "Continent",
+    y = "Electricity Generating Capacity (kW)",
+    fill = "Energy Type"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+We first examined the total electricity generating capacity of continents compared to the total sources of clean energy production. We see that although Asia has the highest overall capacity, they are also the largest producer of clean energy. Europe and North America share strikingly similar profiles with Europe producing the second highest amount of clean energy in the world. Also of note is South America who produces the majority of their electricity through clean sources. 
+
+
+```{r}
+wfb_df$Dirty_exports_percapita_log <- log10(wfb_df$Dirty_exports_percapita)
+wfb_df$Economy..Real.GDP.per.capita_log <- log10(wfb_df$Economy..Real.GDP.per.capita)
+
+ggplot(wfb_df, aes(
+  x = Economy..Real.GDP.per.capita,
+  y = Dirty_exports_percapita_log,
+  size = Clean_energy_production_percapita,
+  label = Country,
+  color = Geography..Map.references
+)) +
+  geom_point(alpha = 0.7) +
+  geom_text(check_overlap = TRUE, size = 3, vjust = -1, show.legend = FALSE) +
+  scale_color_brewer(palette = "Set1") +
+  scale_size_continuous(range = c(2, 12)) +
+  theme_minimal() +
+  theme(
+    legend.key.size = unit(0.4, "cm"),       # shrink legend key box
+    legend.text = element_text(size = 8),    # smaller text
+    legend.title = element_text(size = 9),   # smaller title
+    legend.spacing.y = unit(0.2, "cm")       # tighter spacing
+  ) +
+  labs(
+    x = "Real GDP per Capita",
+    y = "Dirty Exports per Capita (BTU)",
+    size = "Clean Energy Production per Capita (kW)",
+    title = "Clean and Dirty Energy with Respect to GDP"
+  ) +
+  xlim(0, 140000) +
+  ylim(3.5, 10)
+#quatar is outlier
+
+```
+
+We now turn our attention to the connection to gdp percapita while also considering countries imports and exports. Note that the y-axis, Dirty Exports per Capita(BTU), is log scaled. Here we observe some correlation between gdp per capita and exports. This is likely because exporting dirty energy is a lucrative business. We also see that wealthier countries produce more clean energy in general. Maybe because the have more wealth to invest into new energy infrastructure. We also note that South American countries produce as much clean energy as countries with larger gdp. Norway is the largest producer of clean energy per capita, yet they are also one of the highest exporters of dirty energy. In general, we see that countries who are producing large amounts of clean energy may still be producing and exporting large amounts of dirty energy. Therefore, they are still contributing to the overall use of dirty energy worldwide.
+
+### Conclusion
+We conclude that a countries energy profile has a significant impact on their economy. Wealthier countries typically enjoy larger consumption rate. They are also better enabled to produce clean energy reducing dependence on fossil fuels. Countries who produce large amounts of dirty energy also see a positive benefit to their gdp, in part due to their ability to export their resources.
