@@ -427,10 +427,47 @@ ggplot(merged_df, aes(x = petrol.consumption.per.HA, y = cereal_yield_kg_ha)) +
   ) +
   theme_minimal()
 ```
-This scatter plot suggests a potential positive correlation between petrol consumption per hectare and cereal yield. Additionally, countries with higher total cereal production (indicated by the size of the points) also tend to exhibit higher petrol usage and yield levels.
+```{r}
+library(tidyverse)
+library(reshape2)  # pour melt
 
-A plausible hypothesis emerging from this visualization is that countries with higher energy inputs may achieve more productive agricultural systems. 
+# Étape 1 : Min-max normalization des deux variables
+df_violin <- merged_df %>%
+  select(Continent, cereal_yield_kg_ha, agricultural.Water.withdrawal.per.HA) %>%
+  mutate(
+    cereal_yield_scaled = (cereal_yield_kg_ha - min(cereal_yield_kg_ha, na.rm = TRUE)) /
+                          (max(cereal_yield_kg_ha, na.rm = TRUE) - min(cereal_yield_kg_ha, na.rm = TRUE)),
 
+    water_use_scaled = (agricultural.Water.withdrawal.per.HA - min(agricultural.Water.withdrawal.per.HA, na.rm = TRUE)) /
+                       (max(agricultural.Water.withdrawal.per.HA, na.rm = TRUE) - min(agricultural.Water.withdrawal.per.HA, na.rm = TRUE))
+  ) %>%
+  select(Continent, cereal_yield_scaled, water_use_scaled)
+
+# Étape 2 : passer en format long pour ggplot
+df_long <- df_violin %>%
+  pivot_longer(cols = c(cereal_yield_scaled, water_use_scaled),
+               names_to = "Variable",
+               values_to = "Value")
+
+# Étape 3 : Plot en facette violon par continent et variable
+ggplot(df_long, aes(x = Continent, y = Value, fill = Variable)) +
+  geom_violin(alpha = 0.7, position = position_dodge(0.9), trim = FALSE) +
+  scale_fill_manual(
+    values = c("cereal_yield_scaled" = "#1f77b4", "water_use_scaled" = "#ff7f0e"),
+    labels = c("Cereal Yield", "Water Use")
+  ) +
+  labs(
+    title = "Distribution of Normalized Cereal Yields and Water Use by Continent",
+    y = "Normalized Value (Min-Max)",
+    x = "Continent",
+    fill = "Variable"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+```
 
 
 ```{r, echo= FALSE, warning=FALSE, message=FALSE}
@@ -720,6 +757,24 @@ fviz_pca_ind(res_pca,
   ggtitle("Individuals Factor Map (colored by Continent)") +
   theme_minimal()
 ```
+This graph displays countries projected on the first two principal components, colored by continent. The dimensions reflect contrasting agricultural and resource consumption profiles:
+
+Dimension 1 (32.9% of variance): Primarily separates countries by energy and water consumption. Countries on the left exhibit higher usage of petrol, coal, gas, and agricultural water, while countries on the right have lower consumption or other distinguishing features.
+
+Dimension 2 (13.2% of variance): Opposes countries with high agricultural yields and NPK fertilizer use (bottom) to those with higher energy/water inputs relative to output (top).
+
+A continental reading highlights several regional patterns:
+
+Bottom-Left quadrant (high yields, high NPK, low energy use): Concentration of European and Southeast Asian countries, suggesting more efficient or yield-oriented agricultural systems with moderate input reliance.
+
+Upper-Left quadrant (high energy/water use, low yield): Includes several North American and Oceanian countries, hinting at higher resource intensity with less emphasis on yield efficiency in the observed variables.
+
+Right-hand side (lower input usage): Many African and Asian countries are projected here, likely reflecting lower overall resource consumption or differing agricultural structures.
+
+Central area: Countries from the Middle East, Central America, and the Caribbean tend to cluster near the origin, indicating more balanced or heterogeneous profiles not dominated by any one component.
+
+Lastly, the agricultural production value per hectare, pointing in an intermediate direction, may align more with the bottom-left quadrant—supporting the idea that high yields and targeted input use (like NPK) contribute to higher economic returns per hectare, especially in developed or export-oriented systems.
+
 ```{r, include=FALSE}
 library(ggrepel)
 
