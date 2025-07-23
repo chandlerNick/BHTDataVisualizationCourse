@@ -1,7 +1,5 @@
 ---
-title: "Question 3"
-author: "Luisa Kalkert, Luke Richard, Nicholas Chandler, Mois ???"
-date: "`r Sys.Date()`"
+title: "Question 1"
 output:
   pdf_document: default
   html_document: default
@@ -11,13 +9,13 @@ output:
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
 ```
 
-# Question 3: How do countries relate to each other?
+# Question 1: How is the world connected?
 
-This question analyzes the relationships between the different countries present in our dataset. We use two main methods to find relationships between countries:
-1. Looking for mentions of other countries in each country's background information.
-2. Looking at the imports of each country.
+This question analyzes the relationships between the different countries and world regions in our dataset. We use two main indicators to look at these relationships:
+1. Mentions of other countries in each country's background information.
+2. Imports and exports of each country.
 
-## 3.1 Relations extracted from the countries introduction background
+## 1.1 Relations from the Countries' Introduction Background
 
 The first part of the analysis is based on mentions in each country's background information. Our dataset has a short description in natural language for each country, containing information about the country's history, politics, and other relevant information. This gives us a bit of context to the country, but is not in tabular format.
 
@@ -39,14 +37,14 @@ a_{i,j} =
 
 where \(n\) is the number of countries. This matrix is used for our subsequent analysis.
 
-### 3.1.1 Chord Diagram of World Region Relationships
+### 1.1.1 Chord Diagram of World Region Relationships
 
 First of, we start with a high-level view of the relationships between different world regions. 
 To do this, we create a chord diagram to visualize the relationships between the different regions using the circlize package.
 When a country is mentioned in the background information of another country we'll add (or increase the thickness of) an arrow from the region of the first country to the region of the second country.
 E.g. if the background information of Argentina mentions Spain, we'll add an arrow from South America to Europe. If Argentina mentions Paraguay, we'll add an arrow from South America back to South America.
 
-```{r chord-diagram, echo=FALSE, message=FALSE, warning=FALSE, results='hide', fig.height=8}
+```{r chord-diagram, echo=FALSE, message=FALSE, warning=FALSE, results='hide', fig.height=8, fig.align='center'}
 # Load required packages
 library(readr)     # For reading CSV files
 library(circlize)  # For creating chord diagrams
@@ -286,17 +284,16 @@ circos.track(track.index = 1, panel.fun = function(x, y) {
 
 # Add title with larger font size
 title(main = "World Region Relationships Chord Diagram",
-      cex.main = 1.2,
+      cex.main = 1,
       font.main = 2)
 ```
 
-As we can see, not all regions are connected to each other in the same way. For example, North America has many incoming connections, but only a few outgoing connections. 
-We should take this with caution, as this is likely due to the fact that the data set is created by the CIA and comes from an US centric perspective. 
+As we can see, not all regions are connected to each other in the same way. For example, North America has many incoming connections, but only a few outgoing connections. This means many countries mention Nort American Countries in their background information, but not the other way around.
 Also we can see that there are some regions wich are relevant to many other regions, e.g. Europe, Asia, North America and to a lesser extent Southeast Asia. This might be due to the colonial past of many european countries, as well as current trade relations.
 At the same time, there are other regions that are only relevant to a few other regions, e.g. Oceania, Africa, South and Central America as well as the Middle East. Especially for Africa you can clearly see that african countries mention countries from many other regions but the is not mentioned the other way around.
 Africa is a continent that has been influenced or colonized by many other regions, but is yet to play a significant role internationally.
 
-### 3.1.2 Continent Relationships Barplot
+### 1.1.2 Country Relationships Barplot
 
 
 ```{r packages}
@@ -686,7 +683,14 @@ filtered_countries <- filtered_countries[exclude_mask]
 filtered_continents <- filtered_continents[exclude_mask]
 ```
 
-### 3.1.3 Network Visualization
+### 1.1.3 Network Visualization
+
+
+
+Here, we vizualise the mentions in a network graph, based on the mention-matrix. Each node represents a country and the edges represent the mentions between countries.
+The Fruchterman-Reingold algorithm arranges network nodes by simulating physical forces. 
+From an initial random configuration, nodes repel each other and edges act as springs pulling the nodes together. Forces are applied iteratively until the nodes are in a stable configuration (or the maximum number of iterations is reached).
+
 
 ```{r network_plot_static, fig.width=12, fig.height=10, echo=FALSE}
 # Create an igraph object from the filtered matrix
@@ -810,23 +814,19 @@ legend("topright",
        xpd = TRUE)
 ```
 
-
-Here, we vizualise the mentions in a network graph, based on the mention-matrix. Each node represents a country and the edges represent the mentions between countries.
-The Fruchterman-Reingold algorithm arranges network nodes by simulating physical forces. 
-From an initial random configuration, nodes repel each other and edges act as springs pulling the nodes together. Forces are applied iteratively until the nodes are in a stable configuration (or the maximum number of iterations is reached).
-
 We can see that the network is quite dense, with many countries having multiple connections. There are no clear sub clusters forming, which showcases the globalized and interconnected nature of todays world. 
 We can also see that the network is quite imbalanced with again the US and the UK dominating in central position. Continents are loosely grouped together.
 Some notable exceptions are Spain and the Netherlands, which are both close to many South and Central American countries, hinting at their past as colonial powers.
 
 
 
-## 3.2 Trade Relations
+## 1.2 Trade Relations
 
 After looking at the qualitative analysis of the mentions, we can now look at the quantitative analysis of the trade relations.
-We will start by looking at the trade distribution by region.
+Our data set contains information about the monetary value of imports and exports of each country. 
+We will start by looking at the trade distribution by region. 
 
-### 3.2.1 Trade by Region Piecharts
+### 1.2.1 Trade by Region Piecharts
 
 ```{r libraries2}
 library(ggplot2)
@@ -1025,7 +1025,7 @@ pie(
   region_trade$total_trade,
   labels = region_trade$label,
   col = used_colors,
-  main = paste0("Distribution of Import Volume by Region\nTotal: $", format(round(sum(region_trade$total_trade)), big.mark = "'"), "B"),
+  main = paste0("Import Volume by Region\nTotal: $", format(round(sum(region_trade$total_trade)), big.mark = "'"), "B"),
   cex = 0.6
 )
 
@@ -1069,7 +1069,7 @@ pie(
   region_trade_exports$total_trade,
   labels = region_trade_exports$label,
   col = used_colors,
-  main = paste0("Distribution of Export Volume by Region\nTotal: $", format(round(sum(region_trade_exports$total_trade)), big.mark = "'"), "B"),
+  main = paste0("Export Volume by Region\nTotal: $", format(round(sum(region_trade_exports$total_trade)), big.mark = "'"), "B"),
   cex = 0.6
 )
 par(mfrow = c(1, 1)) # Reset to default
@@ -1080,20 +1080,20 @@ par(mfrow = c(1, 1)) # Reset to default
 Looking at the pie charts, we can see that there are 4 regions dominating the trade:
 Europe, Asia, South-East Asia and North America. These are coincidentally also the regions that have the most incoming relations in the Chord diagram in 3.1.1. 
 We can see that these regions play a mayor role both politically as well as in global trade.
-Interestingly the totals for imports and exports are a bit different, this might for example be due to inaccuracies in reporting. 
+Interestingly the totals for imports and exports are a bit different, this might for example be due to inaccuracies in reporting. Also, we used the most recent data available, which is not always from the same year.
 We can see that the imports and exports are very similar per region, with some minor differences. 
 For example we can see that North America has a higher import volume than export volume.
 
 
-### 3.2.2 Top Importers Violin Plot
+### 1.2.2 Top Importers Violin Plot
 
-```{r violin_plot, fig.height=3, fig.width=5}
+```{r violin_plot, fig.height=3, fig.width=5, fig.align='center'}
 ggplot(import_distribution, aes(x = "Global Imports", y = import_value_billions)) +
   geom_violin(fill = "#1976D2", alpha = 0.6) +
   geom_jitter(width = 0.1, alpha = 0.4, size = 2, color = "#0D47A1") +
   geom_point(data = top_5_countries, 
              aes(y = import_value_billions),
-             color = "red", size = 3) +
+             color = "red", size = 2) +
   geom_text_repel(
     data = top_5_countries,
     aes(label = label),
@@ -1105,10 +1105,10 @@ ggplot(import_distribution, aes(x = "Global Imports", y = import_value_billions)
     box.padding = 0.5,
     point.padding = 0.3,
     force = 10, 
-    cex = 0.5
+    cex = 2
   ) +
   labs(
-    title = "Distribution of Country Import Values (Log2 Scale)",
+    title = "Import Values by Country(Log2 Scale)",
     subtitle = "Top 5 importing countries highlighted in red",
     x = "",
     y = "Import Value (Billions USD) - Log2 Scale"
@@ -1154,7 +1154,7 @@ It is interesting to see that even though Japan and China have not been mentione
 
 
 
-### 3.2.3 Trade Flow Map
+### 1.2.3 Trade Flow Map
 
 
 ```{r process_data}
@@ -1439,19 +1439,20 @@ print(p)
 
 
 Finally we look at a flow map of the trade relationships.
-We can clearly see the trade hubs of the world: Europe, Asia (and South-East Asia) and North America.
+We can clearly see the trade hubs of the world: Europe, Asia and South-East Asia as well as North America.
 We can also see that the trade flows are not evenly distributed, but rather concentrated in a few countries.
 China and the US are the two countries with the largest trade flows. We can also clearly see the infamous trade deficit between the US and China.
-Even though trade is globalized and trade relations can be strong across continents, the majority of large trade flows are still locally between neighbouring countries or for long distance trades between the EU, the US and China.
+Even though trade is globalized and trade relations can be strong across continents, the majority of large trade flows are still locally between neighbouring countries.
+Long distance trades are primarily dominated by Europe, the US and China.
 
 
-## 3.3 Conclusion:
-Todays world is highly interconnected and globalized. However, world regions still remain loosely grouped together and trade between neighbouring countries still play an important role.
-The countries that are most relevant to the background of other countries are also the ones most connected trough trade. These can be seen as the most important global players both historically as well as in todays world.
-Not all of the worlds regions are equally connected to each other. North America and Europe as well as Asia and South-East Asia stick out here as most globallized. Those regions are strongly connected to each other trough trade but also to the rest of the world.
-As an additional note, we can see that either, the influence from non-western countries is not equalled in their historical and political influence or that the data is biased towards western countries. We tend towards the latter conclusion, because China and Japan do also historically have had a strong influence on the world and are also pulled toward the center of the network graph.
-
-
+## 1.3 Conclusion
+Todays world is highly interconnected and globalized. However, world regions still remain loosely grouped together by their importance to each other and the trade between neighbouring countries still plays an important role.
+Not all of the worlds regions are equally connected to each other. North America and Europe as well as Asia and South-East Asia stick out here as most globallized. 
+Those regions are strongly connected to each other trough trade but also to the rest of the world. The Middle East, Africa, Oceania as well as South and Central America are the regions that are least connected to the rest of the world.
+The countries that are most relevant to the background of other countries tend to also be the ones most connected trough trade. These can be seen as the most important global players both historically as well as in todays world.
+As an additional note, we can see that either the influence from non-Western countries is not reflected in their historical and political impact, or the data is biased towards Western countries. 
+We lean towards the latter conclusion, because Japan and especially China did historically have a strong influence on the world, and are also pulled toward the center of the network graph.
 
 
 
