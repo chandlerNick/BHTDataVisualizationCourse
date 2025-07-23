@@ -1,17 +1,17 @@
 ---
 title: "Question5"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 date: "2025-06-18"
 ---
 
-Can we identify global patterns in agricultural and energy-water usage among countries ? 
-
-Scatter plot: energy imports vs. agricultural yield.
-
-Bar chart: Top 10 countries by energy exports and their food production.
+# Can we identify global patterns in agricultural performance and energy-water usage among countries ? 
 
 
-```{r}
+
+
+```{r,include=FALSE}
 library(dplyr)
 library(ggplot2)
 library(ggrepel)
@@ -28,16 +28,16 @@ library(aplpack)
 library(leaflet)
 library(rnaturalearth)
 library(countrycode)
-```
+library(GGally)
+library(FactoMineR)
+library(factoextra)
+library(janitor)
 
-```{r}
+
+
 df <- read.csv("../data/countries.csv")
 
 
-```
-
-
-```{r}
 bad_values <- c('Akrotiri', 'American Samoa', 'Antarctica', 'Antigua and Barbuda',
                 'Ashmore and Cartier Islands', 'Baker Island', 'Bouvet Island',
                 'British Indian Ocean Territory', 'British Virgin Islands',
@@ -58,10 +58,7 @@ df_clean$Geography..Map.references[df_clean$Geography..Map.references == "Arctic
 df_clean$Geography..Map.references[df_clean$Geography..Map.references == "AsiaEurope"] <- "Europe"
 
 
-```
 
-
-```{r}
 # Function to display the columns and nan counts
 col_names_and_nas <- function(df) {
   for (i in seq_along(df)) {
@@ -71,10 +68,7 @@ col_names_and_nas <- function(df) {
 
 # read data
 full_df <- df_clean
-```
 
-
-```{r}
 # Function to display the columns and nan counts
 col_names_and_nas <- function(df) {
   for (i in seq_along(df)) {
@@ -100,14 +94,8 @@ cols_to_keep <- c("Geography..Map.references","Environment..Total.water.withdraw
 trim_df <- full_df[,cols_to_keep]
 trim_df$Country <- full_df[,1]
 rownames(trim_df) <- full_df[,1]
-trim_df
 
 
-```
-
-
-```{r}
-library(stringr)
 
 library(dplyr)
 library(stringr)
@@ -263,37 +251,7 @@ trim_df$Economy..Average.household.expenditures...on.food <- as.numeric(sub("%",
 colnames(trim_df)[colnames(trim_df) == "Economy..Average.household.expenditures...on.food"] <- "household.expenditures.food.percent"
 
 
-trim_df
-```
-
-
-
-  "Environment..Total.water.withdrawal...industrial",
-  "Environment..Total.water.withdrawal...agricultural",
-  "Environment..Total.water.withdrawal...municipal",
-  "Energy..Natural.gas...imports",
-  "Energy..Natural.gas...consumption",
-  "Energy..Natural.gas...production",
-  "Energy..Coal...consumption",
-  "Energy..Coal...exports",
-  "Energy..Coal...imports",
-  "Energy..Coal...production",
-  "Energy..Petroleum...refined.petroleum.consumption",
-  "Energy..Petroleum...total.petroleum.production"
-
-
-
-
-```{r}
 data1 <- read.csv("../data/FAO_Dataset_19_23.csv", stringsAsFactors = FALSE)
-view(data1)
-```
-
-
-
-
-
-```{r}
 
 
 # 2. Les colonnes que tu veux garder
@@ -334,22 +292,10 @@ cols_to_keep <- c(
   "Country_area_Area_1000_ha",                                                                                           "Cropland_Area_1000_ha"
 )
 
-# 3. Identifier celles qui manquent
-missing_cols <- setdiff(cols_to_keep, actual_cols)
-
-# 4. Afficher les colonnes non trouvées
-print("Colonnes non trouvées dans data1 :")
-print(missing_cols)
-
-```
 
 
-
-```{r}
 selected_df <- data1[, cols_to_keep]
-```
 
-```{r}
 # Noms plus commodes
 new_names <- c(
   "Area",
@@ -395,15 +341,10 @@ colnames(selected_df) <- new_names
 data1 = selected_df
 data1$Area[222] <- "United States"
 data1$Area[216] <- "Turkey (Turkiye)"
-data1$Area[174] <-  "Russia"
+data1$Area[174] <-  "Russia" 
 
 data1$Area[220] <- "United Kingdom"
 
-```
-
-
-
-```{r}
 trim_df$ID_Npm_Country <- rownames(trim_df)
 
 merged_df <- merge(trim_df, data1, 
@@ -419,8 +360,6 @@ merged_df <- merged_df %>%
 merged_df <- merged_df %>%
   mutate(Insecticides_per_HA = Insecticides_Agricultural_Use_t / (Cropland_Area_1000_ha * 1000))
 
-
-
 merged_df <- merged_df %>%
   mutate(Coal.consumption.per.HA = Coal.consumption.tons / (Cropland_Area_1000_ha * 1000))
 
@@ -433,10 +372,33 @@ merged_df <- merged_df %>%
 merged_df <- merged_df %>%
   mutate(agricultural.Water.withdrawal.per.HA = Water.withdrawal.agricultural.m3 / (Cropland_Area_1000_ha * 1000))
 
+remove_outliers_iqr <- function(df, cols) {
+  for (col in cols) {
+    Q1 <- quantile(df[[col]], 0.25, na.rm = TRUE)
+    Q3 <- quantile(df[[col]], 0.75, na.rm = TRUE)
+    IQR_val <- Q3 - Q1
+    lower_bound <- Q1 - 1.5 * IQR_val
+    upper_bound <- Q3 + 1.5 * IQR_val
+    
+    df <- df %>% filter(.data[[col]] >= lower_bound & .data[[col]] <= upper_bound)
+  }
+  return(df)
+}
+
+# Liste des colonnes pour lesquelles on veut retirer les outliers
+vars_to_clean <- c(
+"cereal_yield_kg_ha"
+)
+
+# Appliquer le filtre
+merged_df <- remove_outliers_iqr(merged_df, vars_to_clean)
+
+
+
+merged_df$Continent[51] <-  "Europe" 
+
 
 ```
-
-
 
 
 
@@ -449,82 +411,56 @@ merged_df <- merged_df %>%
 
 
 
-```{r}
+```{r, echo = FALSE, warning=FALSE, message=FALSE}
 library(ggplot2)
 
 
+# Graphique
 ggplot(merged_df, aes(x = petrol.consumption.per.HA, y = cereal_yield_kg_ha)) +
-  geom_point(aes(color = Continent), size = 3, alpha = 0.7) +
-  scale_x_log10() +  # better spread
+  geom_point(aes(color = Continent, size = merged_df$cereal_prod_t), alpha = 0.7) +
+  scale_x_log10() +
+  scale_size_continuous(name = "Total Cereal Production (T)", range = c(1, 10)) +
   labs(
-    title = "petrol consumption vs Cereal Yield",
-    x = "petrol consumption bbl (log scale)",
+    title = "Petrol Consumption vs Cereal Yield",
+    x = "Petrol Consumption per ha (log scale)",
     y = "Cereal Yield (kg/ha)"
   ) +
   theme_minimal()
 ```
+This scatter plot suggests a potential positive correlation between petrol consumption per hectare and cereal yield. Additionally, countries with higher total cereal production (indicated by the size of the points) also tend to exhibit higher petrol usage and yield levels.
 
-```{r}
-library(dplyr)
+A plausible hypothesis emerging from this visualization is that countries with higher energy inputs may achieve more productive agricultural systems. 
+
+
+
+```{r, echo= FALSE, warning=FALSE, message=FALSE}
 library(ggplot2)
-library(scales)
+library(viridis)
+library(hrbrthemes)  # pour theme_ipsum
+library(corrplot)
+library( missMDA)
+library(ggplot2)
+library(viridis)
 
-df_plot <- merged_df %>%
-  select(ID_Npm_Country, cereal_prod_t) %>%
-  filter(!is.na(cereal_prod_t)) %>%
-  group_by(ID_Npm_Country) %>%
-  summarise(total_prod = sum(cereal_prod_t, na.rm = TRUE)) %>%
-  ungroup() %>%
-  mutate(perc = 100 * total_prod / sum(total_prod)) %>%
-  filter(perc >= 1) %>%
-  arrange(desc(perc))
 
-# 1. Ajouter le rendement (par moyenne si plusieurs lignes par pays)
-yield_df <- merged_df %>%
-  select(ID_Npm_Country, cereal_yield_kg_ha) %>%
-  group_by(ID_Npm_Country) %>%
-  summarise(mean_yield = mean(cereal_yield_kg_ha, na.rm = TRUE))
-merged_df
-yield_df
-# 2. Rejoindre avec df_plot
-df_plot <- df_plot %>%
-  left_join(yield_df, by = "ID_Npm_Country")
-
-# 3. Barplot avec couleur = rendement
-ggplot(df_plot, aes(x = reorder(ID_Npm_Country, -perc), y = perc, fill = mean_yield)) +
-  geom_bar(stat = "identity") +
-  labs(
-    title = "Cereal Production Share by Country",
-    subtitle = "Includes wheat, rice, maize, barley, etc.",
-    x = "Country",
-    y = "Production Percentage (%)",
-    fill = "Average Yield\n(kg per hectare)"
+ggplot(merged_df, aes(x = cereal_yield_kg_ha, fill = Continent)) +
+  geom_density(alpha = 0.7, color = NA) +  # Pas de contour = plus clair
+  scale_fill_viridis(discrete = TRUE, option = "D") +
+  facet_wrap(~ Continent, scales = "free_y") +  # Un graphe par continent
+  theme_minimal(base_size = 14) +  # Simplicité + lisibilité
+  theme(
+    legend.position = "none",  # Pas besoin de légende
+    strip.text = element_text(size = 12, face = "bold")
   ) +
-  scale_y_continuous(labels = scales::percent_format(scale = 1)) +
-  scale_fill_viridis_c(option = "D", direction = -1) +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 60, hjust = 1))
+  xlab("Cereal Yield (kg/ha)") +
+  ylab("Density")
 
 ```
-# PCA 
 
-```{r}
-# Chargement des bibliothèques
-library(tidyverse)
-library(FactoMineR)
-library(factoextra)
-library(janitor)
+```{r, include=FALSE}
 
+vars_corr <- c(
 
-  
-vars_pca <- c(
-  "cereal_yield_kg_ha", 
-  #"fruit_yield_kg_ha", 
-  "maize_yield_kg_ha",
-  "pulses_yield_kg_ha",
-  "sugar_crop_yield_kg_ha", 
-  #"eggs_yield_g_animal",
-  #"sheep_goat_meat_yield_kg",
 
   
   "Coal.consumption.per.HA",
@@ -534,16 +470,16 @@ vars_pca <- c(
   
 
   
-  "Insecticides_per_HA",
+  #"Insecticides_per_HA",
   "npk_per_ha",
-  "Herbicides_per_HA",
-  "agri_prod_value_usdppp_per_ha"
+  #"Herbicides_per_HA",
+  "agri_prod_value_usdppp_per_ha",
 
   
-  #"Coal.consumption.tons",
-  #"petrol.consumption.bbl",
-  #"Natural.gas.consumption.m3",
-  #"Water.withdrawal.agricultural.m3",
+  "Coal.consumption.tons",
+  "petrol.consumption.bbl",
+  "Natural.gas.consumption.m3",
+  "Water.withdrawal.agricultural.m3",
   
   #"npk_Agricultural_Use_t",
   #"pk_Agricultural_Use_t",
@@ -562,13 +498,96 @@ vars_pca <- c(
  
  # Production 
  
-  #"cereal_prod_t",
+  "cereal_prod_t",
   #"eggs_prod_t",
   #"fruit_prod_t",
-  #"maize_prod_t",
-  #"milk_prod_t",
-  #"pulses_prod_t",
+  "maize_prod_t",
+  "milk_prod_t",
+  "pulses_prod_t"
   #"sugar_crop_prod_t"
+)
+corr_data <- merged_df %>% select(all_of(vars_corr))
+# Imputation
+imputed <- imputePCA(corr_data, ncp = 2)
+corr_data <- imputed$completeObs
+
+corr_data <- as.data.frame(corr_data)
+corr_data$Continent <- merged_df$Continent
+corr_data$Country <- merged_df$ID_Npm_Country
+
+#corrplot(corr_data, method = "color", type = "upper", tl.col = "black", addCoef.col = "black")
+```
+
+
+
+
+# Principal Component Analysis (PCA)
+In this analysis, we performed a Principal Component Analysis (PCA) on a set of standardized (per hectare of arable land) agricultural, environmental, and input-related variables across countries. T
+he variables include several yield measures (e.g., cereal, maize, fruit, pulses, sugar crops), energy consumption per hectare (coal, petrol, natural gas), agricultural water withdrawal per hectare, fertilizer input (NPK, herbicides, insecticides), agricultural production value per hectare, and the share of irrigated cropland.
+
+These variables were grouped into thematic categories—Yield, Energy, Fertilizer, Water, Agricultural Structure, Value, and Production—to better understand the multidimensional structure of agricultural efficiency and resource use across countries.
+
+```{r,include=FALSE}
+# Chargement des bibliothèques
+
+
+
+  
+vars_pca_per_HA <- c(
+  "cereal_yield_kg_ha", 
+  "fruit_yield_kg_ha", 
+  "maize_yield_kg_ha",
+  "pulses_yield_kg_ha",
+  "sugar_crop_yield_kg_ha", 
+  #"eggs_yield_g_animal",
+  #"sheep_goat_meat_yield_kg",
+
+  
+  "Coal.consumption.per.HA",
+  "petrol.consumption.per.HA",
+  "Natural.gas.per.HA",
+  "agricultural.Water.withdrawal.per.HA",
+  
+
+  
+  "Insecticides_per_HA",
+  "npk_per_ha",
+  "Herbicides_per_HA",
+  "agri_prod_value_usdppp_per_ha",
+
+
+  "irrigation_share_cropland_pct"
+)
+
+vars_pca_abso <- c(
+
+  "agri_prod_value_usdppp_per_ha",
+
+  
+  "Coal.consumption.tons",
+  "petrol.consumption.bbl",
+  "Natural.gas.consumption.m3",
+  "Water.withdrawal.agricultural.m3",
+  
+  "npk_Agricultural_Use_t",
+  "pk_Agricultural_Use_t",
+  "Urea_Agricultural_Use_t",
+  "Herbicides_Agricultural_Use_t",
+  "Insecticides_Agricultural_Use_t",
+  
+
+  "Country_area1000_ha",                                                                                               #             
+  "Cropland_Area_1000_ha",
+ 
+ # Production 
+ 
+  "cereal_prod_t",
+  "eggs_prod_t",
+  "fruit_prod_t",
+  "maize_prod_t",
+  "milk_prod_t",
+  "pulses_prod_t",
+  "sugar_crop_prod_t"
 )
 
 var_categories <- c(
@@ -579,8 +598,8 @@ var_categories <- c(
   "maize_yield_kg_ha" = "Yield",
   "pulses_yield_kg_ha" = "Yield",
   "sugar_crop_yield_kg_ha" = "Yield",
-  "eggs_yield_g_animal" = "Yield",
-  "sheep_goat_meat_yield_kg" = "Yield",
+  #"eggs_yield_g_animal" = "Yield",
+  #"sheep_goat_meat_yield_kg" = "Yield",
 
   # Inputs: Fertilizer / Energy
 
@@ -630,24 +649,19 @@ var_categories <- c(
   "sugar_crop_prod_t"="Production"
 )
 
-
-
-```
-
-```{r}
-
 pca_data <- merged_df %>%
-  select(all_of(vars_pca), Continent, ID_Npm_Country) %>%
+  select(all_of(vars_pca_per_HA), Continent, ID_Npm_Country) %>%
   drop_na()  # tu peux aussi faire imput si trop restrictif
 
 pca_data <- merged_df %>%
-  select(all_of(vars_pca), Continent, ID_Npm_Country) %>%
-  filter(rowMeans(is.na(.)) <= 0.20)
+  select(all_of(vars_pca_per_HA), Continent, ID_Npm_Country) %>%
+  filter(rowMeans(is.na(.)) <= 0.15)
 
-library(missMDA)
-X_incomplete <- scale(pca_data %>% select(all_of(vars_pca)))
+library( missMDA)
+
+X_incomplete <- scale(pca_data %>% select(all_of(vars_pca_per_HA)))
 # Imputation
-imputed <- imputePCA(X_incomplete, ncp = 2)  # ou plus de dimensions
+imputed <- imputePCA(X_incomplete, ncp = 5)  # ou plus de dimensions
 X <- imputed$completeObs
 
 
@@ -655,20 +669,25 @@ X <- imputed$completeObs
 
 
 
-```{r}
+```{r, echo= FALSE, warning=FALSE, message=FALSE}
 res_pca <- prcomp(X, center = TRUE, scale. = TRUE)
 
 ```
 
 
-```{r}
+```{r, echo= FALSE, warning=FALSE, message=FALSE}
 fviz_eig(res_pca, addlabels = TRUE, ylim = c(0, 50)) +
   ggtitle("Scree Plot: Variance Explained by Principal Components") +
   theme_minimal()
 ```
 
+The scree plot below shows the percentage of total variance explained by each principal component. The first two principal components explain approximately 33% and 13% of the variance, respectively, accounting for nearly 46% of the total variability.
 
-```{r}
+While the elbow in the scree plot is not very pronounced (with a slight inflection point after the first component), we proceed by focusing on the first two dimensions to explore the main patterns in the data.
+
+```{r, echo= FALSE, warning=FALSE, message=FALSE}
+
+library(ggrepel)
 fviz_pca_var(res_pca,
              col.var = var_categories[colnames(X)],
              #col.var = "contrib",
@@ -677,23 +696,20 @@ fviz_pca_var(res_pca,
   theme_minimal()
 ```
 
+This plot shows how each variable contributes to the two main principal components. The direction and length of each arrow represent the contribution and correlation of the variable with the components.
 
-```{r}
-fviz_contrib(res_pca, choice = "var", axes = 1, top = 10)
-fviz_contrib(res_pca, choice = "var", axes = 2, top = 10)
-```
+Variables related to agricultural yields cluster in the bottom-left quadrant, suggesting they contribute strongly to Dimension 2. In contrast, variables associated with energy consumption (coal, petrol, gas) are mostly orthogonal to the yield variables and point toward the upper-left quadrant, indicating a strong contribution to Dimension 1. This suggests that yield and energy consumption are not strongly correlated in this dataset.
+
+Similarly, most input-related variables (insecticides, herbicides) align with energy variables, with the exception of NPK fertilizers, which point in the same direction as the yield variables. This may indicate that NPK use is more closely associated with crop productivity than other inputs.
+
+Interestingly, water consumption variables align with energy usage rather than with yields, suggesting that higher water withdrawal does not necessarily translate into higher agricultural performance at a global scale.
+
+The variable representing the average agricultural production value per hectare (USD PPP) points in an intermediate direction. A reasonable interpretation is that energy consumption is more reflective of general development level (e.g., high energy use in oil-exporting countries with low crop yields), rather than of agricultural performance. In contrast, countries with developed agricultural systems and access to irrigation might achieve both higher yield and higher value-added production per hectare. Hence, the average production value captures both productivity and the diversity of economically valuable crops.
 
 
-```{r}
-fviz_pca_var(res_pca,
-             col.var = "contrib",          # couleur par contribution
-             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
-             repel = TRUE) +
-  ggtitle("Correlation Circle (Variables)") +
-  theme_minimal()
-```
+```{r, echo= FALSE, warning=FALSE, message=FALSE}
 
-```{r}
+
 fviz_pca_ind(res_pca,
              geom = "point",
              col.ind = pca_data$Continent,
@@ -704,7 +720,7 @@ fviz_pca_ind(res_pca,
   ggtitle("Individuals Factor Map (colored by Continent)") +
   theme_minimal()
 ```
-```{r}
+```{r, include=FALSE}
 library(ggrepel)
 
 library(ggplot2)
@@ -723,7 +739,7 @@ ggplot(ind_coords, aes(x = PC1, y = PC2, label = Country)) +
 
 ```
 
-```{r}
+```{r,include=FALSE}
 fviz_pca_biplot(res_pca, 
                 label = "var", 
                 habillage = pca_data$Continent, 
@@ -733,39 +749,11 @@ fviz_pca_biplot(res_pca,
                 col.var = "steelblue")
 ```
 
-```{r}
-library(corrplot)
-corr_data <- merged_df %>% select(all_of(vars_pca)) %>% cor(use = "complete.obs")
-corrplot(corr_data, method = "color", type = "upper", tl.col = "black", addCoef.col = "black")
-
-```
-```{r}
-vars <- c(
-  "cereal_yield_kg_ha", "fruit_yield_kg_ha", "maize_yield_kg_ha", "pulses_yield_kg_ha",
-  "sugar_crop_yield_kg_ha", "eggs_yield_g_animal", "sheep_goat_meat_yield_kg",
-  "Coal.consumption.per.HA", "petrol.consumption.per.HA", "Natural.gas.per.HA",
-  "agricultural.Water.withdrawal.per.HA", "Insecticides_per_HA",
-  "npk_per_ha", "Herbicides_per_HA", "agri_prod_value_usdppp_per_ha"
-)
-
-pca_data <- merged_df %>%
-  select(Country, Continent, all_of(vars))
-pca_data
-```
 
 
-```{r}
-library(ggplot2)
-library(sf)
 
-# Exemple : carte du NPK par hectare
-world <- ne_countries(scale = "medium", returnclass = "sf")  # Natural Earth map
-map_data <- left_join(world, pca_data, by = c("name" = "Country"))
 
-ggplot(map_data) +
-  geom_sf(aes(fill = petrol.consumption.per.HA)) +
-  scale_fill_viridis_c() +
-  theme_minimal() +
-  labs(title = "NPK use per hectare by country", fill = "kg/ha")
-```
+
+
+
 
