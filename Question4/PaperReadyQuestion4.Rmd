@@ -1,0 +1,399 @@
+---
+title: "Question4"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(dplyr)
+library(ggplot2)
+library(ggrepel)
+library(tidyr)
+library(ks)
+library(rgl)
+library(scales)
+library(MASS)
+library(plotly)
+library(fmsb)
+library(patchwork)
+library(tidyverse)
+library(aplpack)
+library(leaflet)
+library(rnaturalearth)
+library(countrycode)
+library(cowplot)
+```
+
+
+```{r}
+col_names_and_nas <- function(df) {
+  for (i in seq_along(df)) {
+    na_count <- sum(is.na(df[[i]]))
+    empty_count <- sum(df[[i]] == "", na.rm = TRUE)
+    cat(colnames(df)[i], ":", na_count + empty_count, "\n")
+  }
+}
+
+# Read in data
+full_df <- read.csv("../data/clean_data.csv", header = TRUE)
+
+# Trim data
+sub_cols <- grep("male|female", colnames(full_df),ignore.case=TRUE)
+cols_to_keep <- colnames(full_df[, sub_cols])
+cols_to_keep <- c(cols_to_keep, c("Geography..Map.references", "Geography..Geographic.coordinates", "Economy..Real.GDP.per.capita", "People.and.Society..Population...total", "People.and.Society..Birth.rate", "People.and.Society..Maternal.mortality.ratio", "People.and.Society..Infant.mortality.rate...total", "People.and.Society..Life.expectancy.at.birth...total.population", "People.and.Society..Population.growth.rate"))
+
+trim_df <- full_df[-78,cols_to_keep]  # Note, we omit vatican city here due to lack of gender specific data
+trim_df$Country <- full_df[-78,1]
+rownames(trim_df) <- full_df[-78,1]
+
+# Status report
+#col_names_and_nas(trim_df)
+```
+
+```{r}
+# Economy..Real.GDP.per.capita
+trim_df$Economy..Real.GDP.per.capita <- as.numeric(gsub("[$,]", "", str_extract(trim_df$Economy..Real.GDP.per.capita, "\\$[0-9,]+")))
+colnames(trim_df)[colnames(trim_df) == "Economy..Real.GDP.per.capita"] <- "Real.GDP.per.capita.USD"
+
+# People.and.Society..Population.growth.rate
+trim_df$People.and.Society..Population.growth.rate <- as.numeric(sub("%", "", str_extract(trim_df$People.and.Society..Population.growth.rate, "[0-9.]+%"))) / 100
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Population.growth.rate"] <- "Population.growth.rate.percent"
+
+# People.and.Society..Birth.rate - births 
+trim_df$People.and.Society..Birth.rate <- as.numeric(str_extract(trim_df$People.and.Society..Birth.rate, "^[0-9]+")) / 1000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Birth.rate"] <- "Live.births.per.1000.people"
+
+# People.and.Society..Population...total
+trim_df$People.and.Society..Population...total <- as.numeric(gsub(",", "", str_extract(trim_df$People.and.Society..Population...total, "^[0-9,]+")))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Population...total"] <- "Total.population"
+
+# People.and.Society..Maternal.mortality.ratio - deaths per live birth
+trim_df$People.and.Society..Maternal.mortality.ratio <- as.numeric(gsub(",", "", str_extract(trim_df$People.and.Society..Maternal.mortality.ratio, "^[0-9]+"))) / 100000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Maternal.mortality.ratio"] <- "Maternal.deaths.per.100000.live.births"
+
+# People.and.Society..Infant.mortality.rate...total - deaths per live birth
+trim_df$People.and.Society..Infant.mortality.rate...total <- as.numeric(str_extract(trim_df$People.and.Society..Infant.mortality.rate...total, "^[0-9.]+")) / 1000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Infant.mortality.rate...total"] <- "Infant.deaths.per.1000.live.births"
+
+# People.and.society..Life.expectancy.at.birth...total.population
+trim_df$People.and.Society..Life.expectancy.at.birth...total.population <- as.numeric(str_extract(trim_df$People.and.Society..Life.expectancy.at.birth...total.population, "^[0-9.]+"))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Life.expectancy.at.birth...total.population"] <- "Life.expectancy.at.birth"
+
+# Geography..Map.references
+colnames(trim_df)[colnames(trim_df) == "Geography..Map.references"] <- "Continent"
+
+# People.and.Society..Population...male
+trim_df$People.and.Society..Population...male <- as.numeric(gsub(",", "", str_extract(trim_df$People.and.Society..Population...male, "^\\s*[0-9,]+")))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Population...male"] <- "Male.population"
+
+# People.and.Society..Population...female
+trim_df$People.and.Society..Population...female <- as.numeric(gsub(",", "", str_extract(trim_df$People.and.Society..Population...female, "^\\s*[0-9,]+")))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Population...female"] <- "Female.population"
+
+# Economy..Youth.unemployment.rate..ages.15.24....female
+trim_df$Economy..Youth.unemployment.rate..ages.15.24....female <- as.numeric(str_extract(trim_df$Economy..Youth.unemployment.rate..ages.15.24....female, "^\\s*[0-9.]+")) / 100
+colnames(trim_df)[colnames(trim_df) == "Economy..Youth.unemployment.rate..ages.15.24....female"] <- "Female.unemployment.rate.15.24"
+
+# Economy..Youth.unemployment.rate..ages.15.24....male
+trim_df$Economy..Youth.unemployment.rate..ages.15.24....male <- as.numeric(str_extract(trim_df$Economy..Youth.unemployment.rate..ages.15.24....male, "^\\s*[0-9.]+")) / 100
+colnames(trim_df)[colnames(trim_df) == "Economy..Youth.unemployment.rate..ages.15.24....male"] <- "Male.unemployment.rate.15.24"
+
+
+# People.and.Society..School.life.expectancy..primary.to.tertiary.education....female
+trim_df$People.and.Society..School.life.expectancy..primary.to.tertiary.education....female <- as.numeric(str_extract(trim_df$People.and.Society..School.life.expectancy..primary.to.tertiary.education....female, "^\\s*[0-9]+"))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..School.life.expectancy..primary.to.tertiary.education....female"] <- "Female.expected.years.of.education"
+
+# People.and.Society..School.life.expectancy..primary.to.tertiary.education....male
+trim_df$People.and.Society..School.life.expectancy..primary.to.tertiary.education....male <- as.numeric(str_extract(trim_df$People.and.Society..School.life.expectancy..primary.to.tertiary.education....male, "^\\s*[0-9]+"))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..School.life.expectancy..primary.to.tertiary.education....male"] <- "Male.expected.years.of.education"
+
+# People.and.Society..Literacy...female
+trim_df$People.and.Society..Literacy...female <- as.numeric(str_extract(trim_df$People.and.Society..Literacy...female, "^\\s*[0-9.]+")) / 100
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Literacy...female"] <- "Female.literacy.rate"
+
+# People.and.Society..Literacy...male
+trim_df$People.and.Society..Literacy...male <- as.numeric(str_extract(trim_df$People.and.Society..Literacy...male, "^\\s*[0-9.]+")) / 100
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Literacy...male"] <- "Male.literacy.rate"
+
+# People.and.Society..Tobacco.use...female
+trim_df$People.and.Society..Tobacco.use...female <- as.numeric(str_extract(trim_df$People.and.Society..Tobacco.use...female, "^\\s*[0-9.]+")) / 100
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Tobacco.use...female"] <- "Female.proportion.of.tobacco.users"
+
+# People.and.Society..Tobacco.use...male
+trim_df$People.and.Society..Tobacco.use...male <- as.numeric(str_extract(trim_df$People.and.Society..Tobacco.use...male, "^\\s*[0-9.]+")) / 100
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Tobacco.use...male"] <- "Male.proportion.of.tobacco.users"
+
+# People.and.Society..Life.expectancy.at.birth...female
+trim_df$People.and.Society..Life.expectancy.at.birth...female <- as.numeric(str_extract(trim_df$People.and.Society..Life.expectancy.at.birth...female, "^\\s*[0-9.]+"))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Life.expectancy.at.birth...female"] <- "Female.life.expectancy.at.birth"
+
+# People.and.Society..Life.expectancy.at.birth...male
+trim_df$People.and.Society..Life.expectancy.at.birth...male <- as.numeric(str_extract(trim_df$People.and.Society..Life.expectancy.at.birth...male, "^\\s*[0-9.]+"))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Life.expectancy.at.birth...male"] <- "Male.life.expectancy.at.birth"
+
+# People.and.Society..Infant.mortality.rate...female
+trim_df$People.and.Society..Infant.mortality.rate...female <- as.numeric( str_extract(trim_df$People.and.Society..Infant.mortality.rate...female, "^\\s*[0-9.]+")) / 1000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Infant.mortality.rate...female"] <- "Female.IMR.deaths.per.birth"
+
+# People.and.Society..Infant.mortality.rate...male
+trim_df$People.and.Society..Infant.mortality.rate...male <- as.numeric( str_extract(trim_df$People.and.Society..Infant.mortality.rate...male, "^\\s*[0-9.]+")) / 1000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Infant.mortality.rate...male"] <- "Male.IMR.deaths.per.birth"
+
+# People.and.Society..Median.age...female
+trim_df$People.and.Society..Median.age...female <- as.numeric( str_extract(trim_df$People.and.Society..Median.age...female, "^\\s*[0-9.]+"))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Median.age...female"] <- "Median.age.female"
+
+# People.and.Society..Median.age...male
+trim_df$People.and.Society..Median.age...male <- as.numeric( str_extract(trim_df$People.and.Society..Median.age...male, "^\\s*[0-9.]+"))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Median.age...male"] <- "Median.age.male"
+
+trim_df$Continent[trim_df$Continent == "Central America and the Caribbean"] <- "Central America"
+```
+
+
+# Introduction
+
+In this section we seek to answer the question: "How do selected demographic variables differ between males and females?"
+
+The variables we examine are: Population, Life Expectancy at Birth, Infant Mortality Rate, and Median Age. These are all measured for both males and females.
+
+The techniques we use are Pairs Plots, Kernel Density Estimation + Rug Plots, and Choropleths.
+
+# Correlation
+
+```{r, fig.height=6, fig.width=10}
+gendered_df <- trim_df[,c("Male.population", "Female.population", "Median.age.male", "Median.age.female", "Male.IMR.deaths.per.birth", "Female.IMR.deaths.per.birth", "Male.life.expectancy.at.birth", "Female.life.expectancy.at.birth")]
+
+par(mar = c(8,8,3,3))  # Modify margins to make the plot larger (top, left, bottom, right)
+colnames(gendered_df) <- c("Male.population", "Female.population", "Male.median.age", "Female.median.age", "Male IMR", "Female IMR", "M.Life.Expectancy", "F.Life.Expectancy")
+
+pairs(gendered_df,
+      labels = colnames(gendered_df),
+      cex.labels = 0.8,            # label size
+      font.labels = 2,             # bold
+      gap = 1,                   # spacing between plots and labels
+      upper.panel = NULL,
+      pch = 21, 
+      bg = "lightblue")         # optional: simplify upper triangle
+```
+In these plots, one can see a strong, positive linear relationship between the male and female values for each of the variables: population, median age, infant mortality rate, and life expectancy per country. Because of this, we focus on these variables for the remainder of the analysis.
+
+
+# Univariate Statistical Graphics
+
+```{r}
+plot_two_kde_plots_on_same_axes <- function(x1, x2,
+                                            label1,
+                                            label2,
+                                            title, 
+                                            xlab,
+                                            col1 = "pink",
+                                            col2 = "lightblue", 
+                                            lwd=2, legend.pos="topright", rug.alpha=0.4, ...) {
+  x1 <- na.omit(x1)
+  x2 <- na.omit(x2)
+  
+  xlim = range(c(x1,x2))
+  
+  plot(density(x1),
+       xlab=xlab, main=title, xlim=xlim,
+       col=col1, lwd=lwd, ...)
+  lines(density(x2), col=col2, lwd=lwd)
+  legend(legend.pos, legend=c(label1, label2), col=c(col1, col2), lwd=lwd)
+  
+  # Add a color coded rug
+  rug(x1, col=adjustcolor(col1, alpha.f=rug.alpha), side=1)
+  rug(x2, col=adjustcolor(col2, alpha.f=rug.alpha), side=1)
+}
+```
+
+### Kernel Density Estimates (KDE)
+```{r, fig.width=10, fig.height=10}
+par(mfrow=c(2,2))
+
+# Median Age
+plot_two_kde_plots_on_same_axes(trim_df$Median.age.female, trim_df$Median.age.male, "Female", "Male", "Median Age of Males and Females", "Median Age (years since birth)")
+
+# Infant Mortality Rate
+plot_two_kde_plots_on_same_axes(trim_df$Female.IMR.deaths.per.birth, trim_df$Male.IMR.deaths.per.birth, "Female", "Male", "Infant Mortality Ratio (IMR) of Males and Females", "IMR (Deaths per Birth)")
+
+# Life Expectancy
+plot_two_kde_plots_on_same_axes(trim_df$Female.life.expectancy.at.birth, trim_df$Male.life.expectancy.at.birth, "Female", "Male", "Life Expectancy of Males and Females", "Expected Years of Life After Birth", legend.pos="topleft")
+
+# Population
+plot_two_kde_plots_on_same_axes(trim_df$Female.population, trim_df$Male.population, "Female", "Male", "Population of Males and Females", "Population")
+```
+
+These graphics allow us to understand the distribution of statistics and variables from various countries. Specifically, we can see the relative shape, scale, and location of the distributions corresponding to males and females.
+
+- **Top-Left:** It appears that the male density is slightly higher until approximately age $32$ where the densities of males and females are approximately equal. From approximately age $33$ to $45$ the male density is larger. From approximately $45$ and onwards, the female density is larger.
+
+- **Top-Right:** The female density is larger at lower values of IMR, until about 0.02 where the male density is larger. This means that there is tendency for the female IMR in the examined countries to be smaller.
+
+- **Bottom-Left:** The shape of the male and female densities appear to be approximately equal though the male density is shifted slightly lower indicating a lower male life expectancy in many countries examined.
+
+- **Bottom-Right:** The densities for male and female are approximately equal. Still, using the rug plot, one can see a shift in the right tail of the distribution with a smaller population of women present in the outlying countries, India and China. This could be due to preference for male children in both of these societies.
+
+### Grouped Bar Charts
+```{r}
+
+plot_gender_by_continent <- function(data, male_var, female_var, title, y_label) {
+  library(dplyr)
+  library(tidyr)
+  library(ggplot2)
+  
+  agg_df <- data %>%
+    group_by(Continent) %>%
+    summarise(
+      Male = mean(.data[[male_var]], na.rm = TRUE),
+      Female = mean(.data[[female_var]], na.rm = TRUE)
+    ) %>%
+    mutate(Total = Male + Female) %>%
+    arrange(desc(Total)) %>%
+    select(-Total) %>%
+    pivot_longer(cols = c(Male, Female), names_to = "Gender", values_to = "Value")
+  
+  ggplot(agg_df, aes(x = reorder(Continent, -Value, sum), y = Value, fill = Gender)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    labs(
+      title = title,
+      x = "Continent",
+      y = y_label
+    ) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    scale_fill_manual(values = c("Male" = "lightblue", "Female" = "pink"))
+}
+```
+
+```{r, fig.width=10, fig.height=10}
+age <- plot_gender_by_continent(trim_df, "Median.age.male", "Median.age.female", title="Median Age per Continent", y_label="Average, Median Age (years)")
+
+imr <- plot_gender_by_continent(trim_df, "Male.IMR.deaths.per.birth", "Female.IMR.deaths.per.birth", title="Infant Mortality Rate per Continent", y_label="Average IMR (deaths per birth)")
+
+life.expectancy <- plot_gender_by_continent(trim_df, "Male.life.expectancy.at.birth", "Female.life.expectancy.at.birth", title="Life Expectancy per Continent", y_label="Average Life Expectancy (years)")
+
+population <- plot_gender_by_continent(trim_df, "Male.population", "Female.population", title="Population per Continent", y_label="Average Population")
+
+plot_grid(age, imr, life.expectancy, population, ncol = 2)
+```
+
+These graphics allow comparison of per-continent aggregates so one may glean various insights such as the ordering which different continents follow.
+
+- **Top-Left:** One sees an ordering of average median ages by continent/region. Europe has the population with the highest median age while Africa has the population with the lowest median age. In each region except the Middle East, the median age of females is higher than that of males. Note that the collected statistic was the median age and we took the average of these.
+
+- **Top-Right:** One sees an ordering of average infant mortality rate by continent/region. Africa has the highest infant mortality rate while Europe has the smallest. The ordering is the same for both males and females though males tend to have a higher infant mortality rate than females.
+
+- **Bottom-Left:** One sees an ordering of average life expectancy by continent/region. North America has the highest average life expectancy and Africa has the lowest. Female life expectancy, as seen in the KDE plots tends to be higher than male life expectancy.
+
+- **Bottom-Right:** One sees an ordering of average population per continent/region. Asia has the highest average population and Oceania has the lowest. North America, South America, and Europe have more women than men whereas the other regions tend to have more men than women.
+
+
+
+# Choropleths
+
+Here we present choropleths that display the absolute difference between the variables for each country. Note that many countries are gray since our dataset did not provide gender-wise information on these areas.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+trim_df <- trim_df %>%
+  mutate(
+    PopDiff = abs(Male.population - Female.population),
+    IMRDiff = abs(Male.IMR.deaths.per.birth - Female.IMR.deaths.per.birth),
+    MedianAgeDiff = abs(Median.age.male - Median.age.female),
+    LifeExpectancyDiff = abs(Male.life.expectancy.at.birth - Female.life.expectancy.at.birth)
+  )
+
+plot_static_country_data <- function(df, country_col, value_col, 
+                                     fill_palette = "YlOrRd", 
+                                     legend_title = NULL, 
+                                     missing_color = "gray90") {
+  library(sf)
+  library(rnaturalearth)
+  library(rnaturalearthdata)
+  library(countrycode)
+  library(dplyr)
+  library(ggplot2)
+  
+  # Step 1: Clean + add ISO3 codes
+  df <- na.omit(df)
+  df$iso_a3 <- countrycode(df[[country_col]], "country.name", "iso3c")
+  df$iso_a3[df[[country_col]] == "Kosovo"] <- "XKX"
+
+  # Step 2: Load map
+  world <- ne_countries(returnclass = "sf", scale = "medium")
+  
+  # Step 3: Merge
+  joined <- left_join(world, df[, c("iso_a3", value_col)], by = "iso_a3")
+
+  # Step 4: Plot
+  ggplot(joined) +
+    geom_sf(aes(fill = .data[[value_col]]), color = "white", size = 0.1) +
+    scale_fill_distiller(palette = fill_palette, direction = 1, na.value = missing_color) +
+    labs(fill = legend_title %||% value_col) +
+    theme_void() +
+    theme(
+      legend.position = "right",
+      legend.title = element_text(size = 10),
+      legend.text = element_text(size = 8),
+      legend.key.size = unit(0.4, "cm"),
+      legend.margin = margin(0, 0, 0, 0),
+      legend.box.margin = margin(0, 0, 0, 0)
+    )
+}
+```
+
+
+```{r, fig.width=14, fig.height=10, echo=FALSE, message=FALSE, warning=FALSE}
+ma.map <- plot_static_country_data(
+  df = trim_df,
+  country_col = "Country",
+  value_col = "MedianAgeDiff",
+  fill_palette = "RdPu",
+  legend_title = "Abs. Diff. in Median Ages"
+)
+
+imr.map <- plot_static_country_data(
+  df = trim_df,
+  country_col = "Country",
+  value_col = "IMRDiff",
+  fill_palette = "RdPu",
+  legend_title = "Abs. Diff. in Infant Mortality Rate"
+)
+
+le.map <- plot_static_country_data(
+  df = trim_df,
+  country_col = "Country",
+  value_col = "LifeExpectancyDiff",
+  fill_palette = "RdPu",
+  legend_title = "Abs. Diff. in Life Expectancy"
+)
+
+pop.map <- plot_static_country_data(
+  df = trim_df,
+  country_col = "Country",
+  value_col = "PopDiff",
+  fill_palette = "RdPu",
+  legend_title = "Abs. Diff. in Population"
+)
+
+
+(ma.map | imr.map) / (le.map | pop.map)
+```
+
+These graphics allow us to visualize geospatial trends in the data at a finer granularity than classical statistical graphics such as bar charts. Additionally, by using the absolute difference, we are more able to visualize inequality across the world. Finally, since we take the absolute value, we remove information concerning who the inequality effects as the absolute value function is not surjective.
+
+- **Top-Left:** One sees that there is a large difference in median age in Eastern Europe, Russia, Saudi Arabia, and Mexico. There is a moderate difference in East Asia, South America, and parts of Africa. There is a smaller difference in the Middle East and other parts of Africa.
+
+- **Top-Right:** One sees that there is a large difference in the infant mortality rate in the Middle East and parts of Africa. There is a smaller difference elsewhere.
+
+- **Bottom-Left:** One sees that there is a large difference in life expectancy in Eastern Europe, Russia, Kazakhstan, Mongolia, and South America. In Africa and the Middle East, there tends to be a smaller difference.
+
+- **Bottom-Right:** One sees that there is a large difference in population in India and China. There is a moderate difference in population in Russia, and smaller differences elsewhere. Note that we consider raw counts here, not proportions.
+
+
+# Conclusion
+
+Through this analysis, we draw the following conclusions about the selected statistics and variables: Women tend to have longer life expectancy than men in general. On average countries tend to have older women than men. There are stark differences in the populations of men and women in China and India. Finally, men typically have a higher infant mortality rate, regardless of geographic region.
+
