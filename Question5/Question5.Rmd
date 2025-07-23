@@ -1,0 +1,732 @@
+---
+title: "Question5"
+output:
+  pdf_document:
+    latex_engine: xelatex
+    keep_tex: yes
+  html_document:
+    df_print: paged
+date: "2025-06-18"
+---
+
+# Can we identify global patterns in agricultural performance and energy-water usage among countries ? 
+
+
+
+
+```{r,include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(ggrepel)
+library(tidyr)
+library(ks)
+library(rgl)
+library(scales)
+library(MASS)
+library(plotly)
+library(fmsb)
+library(patchwork)
+library(tidyverse)
+library(aplpack)
+library(leaflet)
+library(rnaturalearth)
+library(countrycode)
+library(FactoMineR)
+library(factoextra)
+library(janitor)
+
+
+
+df <- read.csv("../data/countries.csv")
+
+
+bad_values <- c('Akrotiri', 'American Samoa', 'Antarctica', 'Antigua and Barbuda',
+                'Ashmore and Cartier Islands', 'Baker Island', 'Bouvet Island',
+                'British Indian Ocean Territory', 'British Virgin Islands',
+                'Cayman Islands', 'Christmas Island', 'Clipperton Island', 'Cocos (Keeling) Islands',
+                'Coral Sea Islands', 'Dhekelia', 'Falkland Islands (Islas Malvinas)', 'Faroe Islands',
+                'French Polynesia', 'French Southern and Antarctic Lands', 'Gaza Strip', 'Gibraltar',
+                'Guernsey', 'Heard Island and McDonald Islands', 'Howland Island', 'Isle of Man',
+                'Jan Mayen', 'Jarvis Island', 'Jersey', 'Johnston Atoll', 'Kingman Reef', 'Macau', 'Midway Islands',
+                'Montserrat', 'Navassa Island', 'New Caledonia', 'Niue', 'Norfolk Island', 'Northern Mariana Islands',
+                'Palmyra Atoll', 'Paracel Islands', 'Pitcairn Islands', 'Saint Barthelemy', 'Saint Helena, Ascension, and Tristan da Cunha',
+                'Saint Martin', 'Saint Pierre and Miquelon', 'Sint Maarten', 'Spratly Islands', 'Svalbard', 'Tokelau',
+                'Turks and Caicos Islands', 'Virgin Islands', 'Wake Island', 'Wallis and Futuna', 'World', 'Greenland')
+
+df_clean <- df %>%
+  filter(!Country %in% bad_values)
+
+df_clean$Geography..Map.references[df_clean$Geography..Map.references == "Arctic Region"] <- "Europe"
+df_clean$Geography..Map.references[df_clean$Geography..Map.references == "AsiaEurope"] <- "Europe"
+
+
+
+# Function to display the columns and nan counts
+col_names_and_nas <- function(df) {
+  for (i in seq_along(df)) {
+    cat(colnames(df)[i], ":", sum(is.na(df[[i]])), "\n")
+  }
+}
+
+# read data
+full_df <- df_clean
+
+# Function to display the columns and nan counts
+col_names_and_nas <- function(df) {
+  for (i in seq_along(df)) {
+    cat(colnames(df)[i], ":", sum(is.na(df[[i]])), "\n")
+  }
+}
+
+# Trim data
+cols_to_keep <- c("Geography..Map.references","Environment..Total.water.withdrawal...municipal","Environment..Total.water.withdrawal...industrial","Environment..Total.water.withdrawal...agricultural","Environment..Air.pollutants...particulate.matter.emissions","Environment..Air.pollutants...carbon.dioxide.emissions","Environment..Air.pollutants...methane.emissions",                         "Economy..Real.GDP.per.capita", "People.and.Society..Population...total", "People.and.Society..Population.growth.rate", "People.and.Society..Birth.rate", "People.and.Society..Death.rate", "People.and.Society..Maternal.mortality.ratio", "People.and.Society..Infant.mortality.rate...total", "People.and.Society..Life.expectancy.at.birth...total.population" ,"People.and.Society..Physician.density",                   "Energy..Electricity...consumption",
+"Energy..Electricity...imports",
+"Energy..Coal...production",
+"Energy..Coal...consumption",
+"Energy..Coal...exports",
+"Energy..Coal...imports",
+"Energy..Petroleum...refined.petroleum.consumption",
+"Energy..Natural.gas...production",
+"Energy..Natural.gas...consumption",
+"Energy..Petroleum...total.petroleum.production",
+"Energy..Petroleum...refined.petroleum.consumption",
+"Economy..Average.household.expenditures...on.food",
+"Energy..Natural.gas...imports" )
+
+trim_df <- full_df[,cols_to_keep]
+trim_df$Country <- full_df[,1]
+rownames(trim_df) <- full_df[,1]
+
+
+
+library(dplyr)
+library(stringr)
+
+# Geography..Map.references
+colnames(trim_df)[colnames(trim_df) == "Geography..Map.references"] <- "Continent"
+
+# Fonction pour extraire, convertir et standardiser les volumes d'eau
+convert_water_volume <- function(column) {
+  as.numeric(str_extract(column, "[0-9.]+")) -> value
+  str_extract(column, "(billion|million|thousand)?\\s*cubic meters") -> unit
+  m3 <- case_when(
+    str_detect(unit, "billion") ~ value * 1e9,
+    str_detect(unit, "million") ~ value * 1e6,
+    str_detect(unit, "thousand") ~ value * 1e3,
+    TRUE ~ value
+  )
+  return(m3)
+}
+
+
+# Fonction pour extraire et convertir en metric tons (valeurs numériques)
+convert_metric_tons <- function(column) {
+  # Remplacer virgules par rien
+  clean_col <- str_replace_all(column, ",", "")
+  # Extraire la valeur numérique
+  value <- as.numeric(str_extract(clean_col, "[0-9.]+"))
+  # Extraire le multiplicateur (unit)
+  unit <- str_extract(clean_col, "(billion|million|thousand)?\\s*metric tons")
+  # Appliquer les conversions en tonnes
+  tons <- case_when(
+    str_detect(unit, "billion") ~ value * 1e9,
+    str_detect(unit, "million") ~ value * 1e6,
+    str_detect(unit, "thousand") ~ value * 1e3,
+    TRUE ~ value
+  )
+  return(tons)
+}
+
+
+#Fonction de conversion des barils par jour
+
+convert_bbl_per_day <- function(column) {
+  clean_col <- str_replace_all(column, ",", "")
+  value <- as.numeric(str_extract(clean_col, "[0-9.]+"))
+  unit <- str_extract(clean_col, "(billion|million|thousand)?\\s*bbl/day")
+
+  bbl <- case_when(
+    str_detect(unit, "billion") ~ value * 1e9,
+    str_detect(unit, "million") ~ value * 1e6,
+    str_detect(unit, "thousand") ~ value * 1e3,
+    TRUE ~ value
+  )
+  return(bbl)
+}
+
+trim_df <- trim_df %>%
+  mutate(
+    Water.withdrawal.industrial.m3 = convert_water_volume(`Environment..Total.water.withdrawal...industrial`),
+    Water.withdrawal.agricultural.m3 = convert_water_volume(`Environment..Total.water.withdrawal...agricultural`),
+    Water.withdrawal.municipal.m3 = convert_water_volume(Environment..Total.water.withdrawal...municipal),
+    Natural.gas.imports.m3 = convert_water_volume(Energy..Natural.gas...imports),
+    Natural.gas.consumption.m3 = convert_water_volume(Energy..Natural.gas...consumption),
+    Natural.gas.production.m3 = convert_water_volume(Energy..Natural.gas...production),
+  )
+
+trim_df <- trim_df %>%
+  mutate(
+    petrol.consumption.bbl = convert_bbl_per_day(Energy..Petroleum...refined.petroleum.consumption),
+    petrol.production.bbl = convert_bbl_per_day(Energy..Petroleum...total.petroleum.production)
+
+  )
+
+trim_df <- trim_df %>%
+  mutate(
+    Coal.consumption.tons = convert_metric_tons(`Energy..Coal...consumption`),
+    Coal.exports.tons = convert_metric_tons(`Energy..Coal...exports`),
+    Coal.imports.tons = convert_metric_tons(`Energy..Coal...imports`),
+    Coal.production.tons = convert_metric_tons(`Energy..Coal...production`)
+  )
+
+
+trim_df <- trim_df[, !(colnames(trim_df) %in% c(
+  "Environment..Total.water.withdrawal...industrial",
+  "Environment..Total.water.withdrawal...agricultural",
+  "Environment..Total.water.withdrawal...municipal",
+  "Energy..Natural.gas...imports",
+  "Energy..Natural.gas...consumption",
+  "Energy..Natural.gas...production",
+  "Energy..Coal...consumption",
+  "Energy..Coal...exports",
+  "Energy..Coal...imports",
+  "Energy..Coal...production",
+  "Energy..Petroleum...refined.petroleum.consumption",
+  "Energy..Petroleum...total.petroleum.production"
+  
+))]
+
+# Environment: Air pollutants - particulate matter emissions
+trim_df$Environment..Air.pollutants...particulate.matter.emissions <- 
+  as.numeric(str_extract(trim_df$Environment..Air.pollutants...particulate.matter.emissions, "[0-9.]+"))
+colnames(trim_df)[colnames(trim_df) == "Environment..Air.pollutants...particulate.matter.emissions"] <- "particulate_matter_emissions_microgramme_per_cubic_meter"
+
+# Environment: Air pollutants - carbon dioxide emissions
+trim_df$Environment..Air.pollutants...carbon.dioxide.emissions <- 
+  as.numeric(str_extract(trim_df$Environment..Air.pollutants...carbon.dioxide.emissions, "[0-9.]+"))
+colnames(trim_df)[colnames(trim_df) == "Environment..Air.pollutants...carbon.dioxide.emissions"] <- "CO2_emissions_Megatonne"
+
+# Environment: Air pollutants - methane emissions
+trim_df$Environment..Air.pollutants...methane.emissions <- 
+  as.numeric(str_extract(trim_df$Environment..Air.pollutants...methane.emissions, "[0-9.]+"))
+colnames(trim_df)[colnames(trim_df) == "Environment..Air.pollutants...methane.emissions"] <- "methane_emissions_Megatonne"
+
+# Economy..Real.GDP.per.capita
+trim_df$Economy..Real.GDP.per.capita <- as.numeric(gsub("[$,]", "", str_extract(trim_df$Economy..Real.GDP.per.capita, "\\$[0-9,]+")))
+colnames(trim_df)[colnames(trim_df) == "Economy..Real.GDP.per.capita"] <- "Real.GDP.per.capita.USD"
+
+# People.and.Society..Population.growth.rate
+trim_df$People.and.Society..Population.growth.rate <- as.numeric(sub("%", "", str_extract(trim_df$People.and.Society..Population.growth.rate, "[0-9.]+%"))) / 100
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Population.growth.rate"] <- "Population.growth.rate.percent"
+
+# People.and.Society..Birth.rate - births 
+trim_df$People.and.Society..Birth.rate <- as.numeric(str_extract(trim_df$People.and.Society..Birth.rate, "^[0-9]+")) / 1000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Birth.rate"] <- "Live.births.per.1000.people"
+
+# People.and.Society..Death.rate - deaths per person 
+trim_df$People.and.Society..Death.rate <- as.numeric(str_extract(trim_df$People.and.Society..Death.rate, "^[0-9]+")) / 1000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Death.rate"] <- "Deaths.per.1000.people"
+
+# People.and.Society..Maternal.mortality.ratio - deaths per live birth
+trim_df$People.and.Society..Maternal.mortality.ratio <- as.numeric(gsub(",", "", str_extract(trim_df$People.and.Society..Maternal.mortality.ratio, "^[0-9]+"))) / 100000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Maternal.mortality.ratio"] <- "Maternal.deaths.per.100000.live.births"
+
+# People.and.Society..Infant.mortality.rate...total - deaths per live birth
+trim_df$People.and.Society..Infant.mortality.rate...total <- as.numeric(str_extract(trim_df$People.and.Society..Infant.mortality.rate...total, "^[0-9.]+")) / 1000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Infant.mortality.rate...total"] <- "Infant.deaths.per.1000.live.births"
+
+# People.and.society..Life.expectancy.at.birth...total.population
+trim_df$People.and.Society..Life.expectancy.at.birth...total.population <- as.numeric(str_extract(trim_df$People.and.Society..Life.expectancy.at.birth...total.population, "^[0-9.]+"))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Life.expectancy.at.birth...total.population"] <- "Life.expectancy.at.birth"
+
+# People.and.Society..Population...total
+trim_df$People.and.Society..Population...total <- as.numeric(gsub(",", "", str_extract(trim_df$People.and.Society..Population...total, "^[0-9,]+")))
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Population...total"] <- "Total.population"
+
+# People.and.Society..Physician.density
+trim_df$People.and.Society..Physician.density <- as.numeric(str_extract(trim_df$People.and.Society..Physician.density, "^[0-9.]+")) / 1000
+colnames(trim_df)[colnames(trim_df) == "People.and.Society..Physician.density"] <- "Physicians.per.1000.people"
+
+
+# Economy..Average.household.expenditures...on.food
+trim_df$Economy..Average.household.expenditures...on.food <- as.numeric(sub("%", "", str_extract(trim_df$Economy..Average.household.expenditures...on.food, "[0-9.]+%"))) / 100
+colnames(trim_df)[colnames(trim_df) == "Economy..Average.household.expenditures...on.food"] <- "household.expenditures.food.percent"
+
+
+data1 <- read.csv("../data/FAO_Dataset_19_23.csv", stringsAsFactors = FALSE)
+
+
+# 2. Les colonnes que tu veux garder
+cols_to_keep <- c(
+  "Area",
+  "Cereals._primary_Yield_kg.ha",
+  "Cereals._primary_Production_t",
+  "Eggs_Primary_Yield.Carcass_Weight_g.An",
+  "Eggs_Primary_Production_t",
+  "Fruit_Primary_Production_t",
+  "Fruit_Primary_Yield_kg.ha",
+  "Maize_.corn._Yield_kg.ha",
+  "Maize_.corn._Production_t",
+  "Milk._Total_Production_t",
+  "Milk._Total_Milk_Animals_An",
+  "Pulses._Total_Production_t",
+  "Pulses._Total_Yield_kg.ha",
+  "Sheep_and_Goats_Stocks_An",
+  "Sheep_and_Goat_Meat_Yield.Carcass_Weight_kg.An",
+  "Sugar_Crops_Primary_Yield_kg.ha",
+  "Sugar_Crops_Primary_Production_t",
+  "Agricultural_land_Share_in_Land_area_.",
+  "Agricultural_land_Value_of_agricultural_production_.Int._.._per_Area_USD_PPP.ha",
+  "Arable_land_Share_in_Agricultural_land_.",
+  "Land_area_equipped_for_irrigation_Share_in_Cropland_.",
+  "Permanent_crops_Share_in_Agricultural_land_.",
+  "Permanent_meadows_and_pastures_Share_in_Agricultural_land_.",
+  "NPK_fertilizers_Export_quantity_t",
+  "NPK_fertilizers_Import_quantity_t",
+  
+  "NPK_fertilizers_Agricultural_Use_t",
+  "PK_compounds_Agricultural_Use_t",
+  "Urea_Agricultural_Use_t",
+
+  "Herbicides_Agricultural_Use_t",
+  "Insecticides_._Biopesticides_Agricultural_Use_t",
+  
+  "Country_area_Area_1000_ha",                                                                                           "Cropland_Area_1000_ha"
+)
+
+
+
+selected_df <- data1[, cols_to_keep]
+
+# Noms plus commodes
+new_names <- c(
+  "Area",
+  "cereal_yield_kg_ha",
+  "cereal_prod_t",
+  "eggs_yield_g_animal",
+  "eggs_prod_t",
+  "fruit_prod_t",
+  "fruit_yield_kg_ha",
+  "maize_yield_kg_ha",
+  "maize_prod_t",
+  "milk_prod_t",
+  "milk_animals_count",
+  "pulses_prod_t",
+  "pulses_yield_kg_ha",
+  "sheep_goats_stock",
+  "sheep_goat_meat_yield_kg",
+  "sugar_crop_yield_kg_ha",
+  "sugar_crop_prod_t",
+  "agri_land_share_total_land_pct",
+  "agri_prod_value_usdppp_per_ha",
+  "arable_land_share_agri_pct",
+  "irrigation_share_cropland_pct",
+  "perm_crops_share_agri_pct",
+  "perm_pasture_share_agri_pct",
+  "npk_export_t",
+  "npk_import_t",
+  
+  "npk_Agricultural_Use_t",
+  "pk_Agricultural_Use_t",
+  "Urea_Agricultural_Use_t",
+  
+
+  
+  "Herbicides_Agricultural_Use_t",
+  "Insecticides_Agricultural_Use_t",
+  "Country_area1000_ha",                                                                                                "Cropland_Area_1000_ha"
+)
+
+# Renommer
+colnames(selected_df) <- new_names
+
+data1 = selected_df
+data1$Area[222] <- "United States"
+data1$Area[216] <- "Turkey (Turkiye)"
+data1$Area[174] <-  "Russia" 
+
+data1$Area[220] <- "United Kingdom"
+
+trim_df$ID_Npm_Country <- rownames(trim_df)
+
+merged_df <- merge(trim_df, data1, 
+                   by.x = "ID_Npm_Country",   # colonne dans trim_df
+                   by.y = "Area",     # colonne correspondante dans data1
+                   all.x = TRUE)              # merge à gauche (keep all trim_df rows)
+merged_df <- merged_df %>%
+  mutate(npk_per_ha = npk_Agricultural_Use_t / (Cropland_Area_1000_ha * 1000))
+
+merged_df <- merged_df %>%
+  mutate(Herbicides_per_HA = Herbicides_Agricultural_Use_t / (Cropland_Area_1000_ha * 1000))
+
+merged_df <- merged_df %>%
+  mutate(Insecticides_per_HA = Insecticides_Agricultural_Use_t / (Cropland_Area_1000_ha * 1000))
+
+merged_df <- merged_df %>%
+  mutate(Coal.consumption.per.HA = Coal.consumption.tons / (Cropland_Area_1000_ha * 1000))
+
+merged_df <- merged_df %>%
+  mutate(petrol.consumption.per.HA = petrol.consumption.bbl / (Cropland_Area_1000_ha * 1000))
+
+merged_df <- merged_df %>%
+  mutate(Natural.gas.per.HA = Natural.gas.consumption.m3 / (Cropland_Area_1000_ha * 1000))
+
+merged_df <- merged_df %>%
+  mutate(agricultural.Water.withdrawal.per.HA = Water.withdrawal.agricultural.m3 / (Cropland_Area_1000_ha * 1000))
+
+remove_outliers_iqr <- function(df, cols) {
+  for (col in cols) {
+    Q1 <- quantile(df[[col]], 0.25, na.rm = TRUE)
+    Q3 <- quantile(df[[col]], 0.75, na.rm = TRUE)
+    IQR_val <- Q3 - Q1
+    lower_bound <- Q1 - 1.5 * IQR_val
+    upper_bound <- Q3 + 1.5 * IQR_val
+    
+    df <- df %>% filter(.data[[col]] >= lower_bound & .data[[col]] <= upper_bound)
+  }
+  return(df)
+}
+
+# Liste des colonnes pour lesquelles on veut retirer les outliers
+vars_to_clean <- c(
+"cereal_yield_kg_ha"
+)
+
+# Appliquer le filtre
+merged_df <- remove_outliers_iqr(merged_df, vars_to_clean)
+
+
+
+merged_df$Continent[51] <-  "Europe" 
+
+
+```
+
+
+
+
+
+
+
+
+# data exploration 
+
+
+
+```{r, echo = FALSE, warning=FALSE, message=FALSE}
+library(ggplot2)
+
+
+# Graphique
+ggplot(merged_df, aes(x = petrol.consumption.per.HA, y = cereal_yield_kg_ha)) +
+  geom_point(aes(color = Continent, size = merged_df$cereal_prod_t), alpha = 0.7) +
+  scale_x_log10() +
+  scale_size_continuous(name = "Total Cereal Production (T)", range = c(1, 10)) +
+  labs(
+    title = "Petrol Consumption vs Cereal Yield",
+    x = "Petrol Consumption per ha (log scale)",
+    y = "Cereal Yield (kg/ha)"
+  ) +
+  theme_minimal()
+```
+
+
+This first plot suggests a potential positive correlation between petrol consumption per hectare and cereal yield. Additionally, countries with higher total cereal production (indicated by the size of the points) also tend to exhibit higher petrol usage and yield levels.
+We can also observe clusters by continent, suggesting similarities within the same continent.
+
+A plausible hypothesis emerging from this visualization is that countries with higher energy inputs may achieve more productive agricultural systems.
+
+```{r, echo = FALSE, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(reshape2)  # pour melt
+
+# Étape 1 : Min-max normalization des deux variables
+df_violin <- merged_df %>%
+  select(Continent, cereal_yield_kg_ha, agri_land_share_total_land_pct) %>%
+  mutate(
+    cereal_yield_scaled = (cereal_yield_kg_ha - min(cereal_yield_kg_ha, na.rm = TRUE)) /
+                          (max(cereal_yield_kg_ha, na.rm = TRUE) - min(cereal_yield_kg_ha, na.rm = TRUE)),
+
+    water_use_scaled = (agri_land_share_total_land_pct - min(agri_land_share_total_land_pct, na.rm = TRUE)) /
+                       (max(agri_land_share_total_land_pct, na.rm = TRUE) - min(agri_land_share_total_land_pct, na.rm = TRUE))
+  ) %>%
+  select(Continent, cereal_yield_scaled, water_use_scaled)
+
+# Étape 2 : passer en format long pour ggplot
+df_long <- df_violin %>%
+  pivot_longer(cols = c(cereal_yield_scaled, water_use_scaled),
+               names_to = "Variable",
+               values_to = "Value")
+
+# Étape 3 : Plot en facette violon par continent et variable
+ggplot(df_long, aes(x = Continent, y = Value, fill = Variable)) +
+  geom_boxplot(alpha = 0.7, position = position_dodge(0.85), trim = FALSE) +
+  scale_fill_manual(
+    values = c("cereal_yield_scaled" = "#ff7f0e", "water_use_scaled" =  "#1f77b4"),
+    labels = c("Cereal Yield", "Water Use")
+  ) +
+  labs(
+    title = "Distribution of Cereal Yields and Water Use by Continent",
+    y = "Normalized Value (Min-Max)",
+    x = "Continent",
+    fill = "Variable"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+```
+
+These box plots represent the distribution of cereal yields (in orange) and the distribution of water consumption (in blue) for all continents. These values have been normalized between 0 and 1 for comparison purposes.
+
+From an agronomic point of view, cereals are very water-intensive crops, and agriculture is one of the activities that exploits this resource the most. This graph seems to show a slight correlation between these two parameters. However, in Africa, the opposite situation can be observed.
+This graph seems to confirm agronomic knowledge by suggesting that a country's water consumption enables it to increase its cereal yields.
+
+However, we cannot rule out a confounding variable. For example, we can imagine that developed countries have a rich economy, partly produced by strong agriculture. These same countries have developed water supply systems for industry and residents.
+
+```{r, echo= FALSE, warning=FALSE, message=FALSE}
+library(ggplot2)
+library(viridis)
+library(corrplot)
+library(missMDA)
+library(ggplot2)
+library(viridis)
+
+
+ggplot(merged_df, aes(x = cereal_yield_kg_ha, fill = Continent)) +
+  geom_density(alpha = 0.7, color = NA) +  # Pas de contour = plus clair
+  scale_fill_viridis(discrete = TRUE, option = "D") +
+  facet_wrap(~ Continent, scales = "free_y") +  # Un graphe par continent
+  theme_minimal(base_size = 14) +  # Simplicité + lisibilité
+  theme(
+    legend.position = "none",  # Pas besoin de légende
+    strip.text = element_text(size = 12, face = "bold")
+  ) +
+  xlab("Cereal Yield (kg/ha)") +
+  ylab("Density")
+
+```
+
+This graph also shows the distribution of cereal yields for each continent, but in a more detailed way by showing its distribution.
+
+It allows us to see significant differences in productivity between continents. Africa appears to be the least productive, while Europe and North America are the most productive. The study of modes allows us to observe continental within differences. For example, European yields do not show a clear mode, suggesting uniformity of production between European countries. In Southeast Asia, there appear to be three yield groups. For North America, consisting solely of Canada and the United States, these two modes are clearly observable.
+
+
+# Principal Component Analysis (PCA)
+In this analysis, we performed a Principal Component Analysis (PCA) on a set of standardized (per hectare of arable land) agricultural, environmental, and input-related variables across countries. T
+he variables include several yield measures (e.g., cereal, maize, fruit, pulses, sugar crops), energy consumption per hectare (coal, petrol, natural gas), agricultural water withdrawal per hectare, fertilizer input (NPK, herbicides, insecticides), agricultural production value per hectare, and the share of irrigated cropland.
+
+These variables were grouped into thematic categories—Yield, Energy, Fertilizer, Water, Agricultural Structure, Value, and Production—to better understand the multidimensional structure of agricultural efficiency and resource use across countries.
+
+```{r,include=FALSE}
+# Chargement des bibliothèques
+
+
+
+  
+vars_pca_per_HA <- c(
+  "cereal_yield_kg_ha", 
+  "fruit_yield_kg_ha", 
+  "maize_yield_kg_ha",
+  "pulses_yield_kg_ha",
+  "sugar_crop_yield_kg_ha", 
+  #"eggs_yield_g_animal",
+  #"sheep_goat_meat_yield_kg",
+
+  
+  "Coal.consumption.per.HA",
+  "petrol.consumption.per.HA",
+  "Natural.gas.per.HA",
+  "agricultural.Water.withdrawal.per.HA",
+  
+
+  
+  "Insecticides_per_HA",
+  "npk_per_ha",
+  "Herbicides_per_HA",
+  "agri_prod_value_usdppp_per_ha",
+
+
+  "irrigation_share_cropland_pct"
+)
+
+
+
+var_categories <- c(
+
+  # Yield (Production efficiency)
+  "cereal_yield_kg_ha" = "Yield",
+  "fruit_yield_kg_ha" = "Yield",
+  "maize_yield_kg_ha" = "Yield",
+  "pulses_yield_kg_ha" = "Yield",
+  "sugar_crop_yield_kg_ha" = "Yield",
+  #"eggs_yield_g_animal" = "Yield",
+  #"sheep_goat_meat_yield_kg" = "Yield",
+
+  # Inputs: Fertilizer / Energy
+
+  
+  "Coal.consumption.tons"= "Energy",
+  "petrol.consumption.bbl"= "Energy",
+  "Natural.gas.consumption.m3"= "Energy",
+    
+  "Coal.consumption.per.HA"= "Energy",
+  "petrol.consumption.per.HA"= "Energy",
+  "Natural.gas.per.HA"= "Energy",
+  "agricultural.Water.withdrawal.per.HA"= "Energy",
+  
+  
+  
+  "Insecticides_per_HA" = "Fertilizer",
+  
+  "Herbicides_per_HA" = "Fertilizer",
+  "npk_per_ha"= "Fertilizer",
+  "npk_Agricultural_Use_t"= "Fertilizer",
+  "pk_Agricultural_Use_t"= "Fertilizer",
+  "Urea_Agricultural_Use_t"= "Fertilizer",
+  "Herbicides_Agricultural_Use_t"= "Fertilizer",
+  "Insecticides_Agricultural_Use_t"= "Fertilizer",
+
+  # Water
+  "Water.withdrawal.agricultural.m3" = "Water",
+
+  # Agricultural structure (% land use, irrigation)
+  "agri_land_share_total_land_pct" = "Agri_%_Structure",
+  "arable_land_share_agri_pct" = "Agri_%_Structure",
+  "perm_crops_share_agri_pct" = "Agri_%_Structure",
+  "perm_pasture_share_agri_pct" = "Agri_%_Structure",
+  "irrigation_share_cropland_pct" = "Agri_%_Structure",
+
+  # Value
+  "agri_prod_value_usdppp_per_ha" = "Agri_Value",
+  "Country_area1000_ha" = "Agri_Value",                                                                                 "Cropland_Area_1000_ha" = "Agri_Value",
+ 
+ # Production 
+  "cereal_prod_t"="Production",
+  "eggs_prod_t"="Production",
+  "fruit_prod_t"="Production",
+  "maize_prod_t"="Production",
+  "milk_prod_t"="Production",
+  "pulses_prod_t"="Production",
+  "sugar_crop_prod_t"="Production"
+)
+
+pca_data <- merged_df %>%
+  select(all_of(vars_pca_per_HA), Continent, ID_Npm_Country) %>%
+  drop_na()  # tu peux aussi faire imput si trop restrictif
+
+pca_data <- merged_df %>%
+  select(all_of(vars_pca_per_HA), Continent, ID_Npm_Country) %>%
+  filter(rowMeans(is.na(.)) <= 0.15)
+
+library( missMDA)
+
+X_incomplete <- scale(pca_data %>% select(all_of(vars_pca_per_HA)))
+# Imputation
+imputed <- imputePCA(X_incomplete, ncp = 5)  # ou plus de dimensions
+X <- imputed$completeObs
+
+
+```
+
+
+
+```{r, echo= FALSE, warning=FALSE, message=FALSE}
+res_pca <- prcomp(X, center = TRUE, scale. = TRUE)
+
+```
+
+
+```{r, echo= FALSE, warning=FALSE, message=FALSE}
+fviz_eig(res_pca, addlabels = TRUE, ylim = c(0, 50)) +
+  ggtitle("Scree Plot: Variance Explained by Principal Components") +
+  theme_minimal()
+```
+
+The scree plot below shows the percentage of total variance explained by each principal component. The first two principal components explain approximately 33% and 13% of the variance, respectively, accounting for nearly 46% of the total variability.
+
+While the elbow in the scree plot is not very pronounced (with a slight inflection point after the first component), we proceed by focusing on the first two dimensions to explore the main patterns in the data.
+
+```{r, echo= FALSE, warning=FALSE, message=FALSE}
+
+library(ggrepel)
+fviz_pca_var(res_pca,
+             col.var = var_categories[colnames(X)],
+             #col.var = "contrib",
+             palette = "Set2",
+             repel = TRUE) +
+  theme_minimal()
+```
+
+This plot shows how each variable contributes to the two main principal components. The direction and length of each arrow represent the contribution and correlation of the variable with the components.
+
+Variables related to agricultural yields cluster in the bottom-left quadrant, suggesting they contribute strongly to Dimension 2. In contrast, variables associated with energy consumption (coal, petrol, gas) are mostly orthogonal to the yield variables and point toward the upper-left quadrant, indicating a strong contribution to Dimension 1. This suggests that yield and energy consumption are not strongly correlated in this dataset.
+
+Similarly, most input-related variables (insecticides, herbicides) align with energy variables, with the exception of NPK fertilizers, which point in the same direction as the yield variables. This may indicate that NPK use is more closely associated with crop productivity than other inputs.
+
+Interestingly, water consumption variables align with energy usage rather than with yields, suggesting that higher water withdrawal does not necessarily translate into higher agricultural performance at a global scale.
+
+The variable representing the average agricultural production value per hectare (USD PPP) points in an intermediate direction. A reasonable interpretation is that energy consumption is more reflective of general development level (e.g., high energy use in oil-exporting countries with low crop yields), rather than of agricultural performance. In contrast, countries with developed agricultural systems and access to irrigation might achieve both higher yield and higher value-added production per hectare. Hence, the average production value captures both productivity and the diversity of economically valuable crops.
+
+
+```{r, echo= FALSE, warning=FALSE, message=FALSE}
+
+
+fviz_pca_ind(res_pca,
+             geom = "point",
+             col.ind = pca_data$Continent,
+             palette = "jco",
+             addEllipses = TRUE,
+             legend.title = "Continent",
+             repel = TRUE) +
+  ggtitle("Individuals Factor Map (colored by Continent)") +
+  theme_minimal()
+```
+### Bottom-left quadrant (−Dim1, −Dim2):
+Characterized by high agricultural yields, intensive NPK fertilizer use, and moderate to lower energy/water consumption.
+
+Dominated by European and Southeast Asian countries.
+
+This quadrant may represent efficient and productive agricultural systems, where outputs are achieved with relatively optimized input use.
+
+### Upper-left quadrant (−Dim1, +Dim2):
+Associated with high energy and water consumption, but lower agricultural yields.
+
+Includes some countries from North America and Oceania.
+
+This could reflect input-heavy systems with lower overall efficiency or different agricultural priorities (e.g., livestock over crops).
+
+### Right side of the map (+Dim1):
+Countries in this region exhibit lower energy and water use, though their yield or input profiles are more mixed.
+
+Several African and Asian countries cluster here.
+
+This may reflect less resource-intensive agriculture, either due to structural constraints or different development levels.
+
+### Center of the map:
+Countries from Central America, the Middle East, and others are dispersed around the origin, indicating no strong association with either axis. These may represent diverse or transitional profiles, balancing input use and productivity.
+
+### Agricultural Value per Hectare: A Crosscutting Variable
+The variable representing the average agricultural production value per hectare (USD PPP) appears to point in an intermediate direction—neither fully aligned with input intensity nor with yield exclusively. This suggests that:
+
+Value creation may result from a combination of yield and input optimization, rather than from raw input intensity alone.
+
+Countries with both moderate yields and access to water/energy infrastructure (e.g., some European nations) may achieve better economic valorization of their land.
+
+### Caution and Final Remarks
+While the PCA helps differentiate agricultural input-output profiles, several caveats apply:
+
+Energy and water consumption do not directly correlate with higher performance globally; contextual factors (e.g., climate, technology, export orientation) likely moderate these effects.
+
+The overlap of countries from different continents indicates high internal heterogeneity, suggesting that development models and agricultural strategies vary widely within regions.
+
+Lastly, the PCA simplifies multidimensional relationships into two axes—so non-linearities or interaction effects may be obscured.
+
+
+
+
+
+
+
+

@@ -1,0 +1,302 @@
+---
+title: "Country Relationships Network Analysis"
+author: "Data Visualization Course"
+output: 
+  html_document:
+    theme: cosmo
+    highlight: tango
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+## Introduction
+
+This document visualizes relationships between countries based on mentions in their background information. The network graph shows how countries are connected, with node sizes representing the number of connections and colors representing continents.
+
+```{r libraries, echo=FALSE}
+library(readr)      # For reading CSV files
+library(RColorBrewer)  # For color palettes
+library(igraph)     # For network visualization
+library(visNetwork) # For interactive network visualization
+```
+
+```{r data_loading, echo=FALSE} 
+# Load the CSV file
+countries_data <- read_csv("/home/luisa/Documents/University/BHT/Data Visualization/BHTDataVisualizationCourse/data/clean_data.csv")
+
+# Convert the CSV data to a more usable format
+countries <- list()
+for (i in 1:nrow(countries_data)) {
+  country_name <- countries_data$Country[i]
+  countries[[country_name]] <- as.list(countries_data[i, -1])  # Exclude the country column
+}
+
+# Remove "World" from the list of countries if it exists
+if ("World" %in% names(countries)) {
+  countries <- countries[names(countries) != "World"]
+}
+```
+
+```{r define_relationships, echo=FALSE}
+# Create a data structure to store country relationships
+country_relationships <- list()
+
+# Define alternative names for certain countries
+country_alternatives <- list(
+  "United Kingdom" = c("Britain", "UK", "England", "British"),
+  "United States" = c("USA", "US"),
+  "China" = c("PRC", "Chinese", "Chin"),
+  "Turkey (Turkiye)" = c("Turkiye", "Turkey", "Turkish"),
+  "Congo, Democratic Republic of the" = c("DRC", "DR Congo", "Congo-Kinshasa", "Congo republics"),
+  "Congo, Republic of the" = c("Congo-Brazzaville", "Congo republics"),
+  "Czechia" = c("Czech Republic", "Czech"),
+  "Eswatini" = c("Swaziland", "Swazee"),
+  "Burma" = c("Myanmar", "Burmese"),
+  "Holy See (Vatican City)" = c("Vatican", "Vatican City"),
+  "Micronesia, Federated States of" = c("FSM", "Micronesia"),
+  "Gambia, The" = c("The Gambia", "Gambia"),
+  "Bahamas, The" = c("The Bahamas", "Bahamas"),
+  "Korea, North" = c("North Korea", "DPRK"),
+  "Korea, South" = c("South Korea", "ROK"),
+  "Timor-Leste" = c("East Timor"),
+  "Taiwan" = c("Republic of China", "ROC"),
+  "Vietnam" = c("Viet Nam"),
+  "Germany" = c("German"),
+  "France" = c("French"),
+  "Italy" = c("Italian"),
+  "Spain" = c("Spanish"),
+  "Portugal" = c("Portuguese"),
+  "Greece" = c("Greek"),
+  "Netherlands" = c("Dutch"),
+  "Belgium" = c("Belgian"),
+  "Sweden" = c("Swedish"),
+  "Norway" = c("Norwegian"),
+  "Denmark" = c("Danish"),
+  "Finland" = c("Finnish"),
+  "Switzerland" = c("Swiss"),
+  "Poland" = c("Polish"),
+  "Hungary" = c("Hungarian")
+)
+
+# For each country, find which other countries are mentioned in its background
+for (country_name in names(countries)) {
+  country_background <- countries[[country_name]]$`Introduction..Background`
+  related_countries <- c()
+  
+  if (!is.null(country_background) && !is.na(country_background)) {
+    # Check for mentions of each other country
+    for (other_country in names(countries)) {
+      # Skip self-references
+      if (other_country != country_name) {
+        # Check if the other country name appears in the background
+        if (grepl(other_country, country_background, ignore.case = TRUE)) {
+          related_countries <- c(related_countries, other_country)
+        } else {
+          # Check alternative names if they exist for this country
+          if (other_country %in% names(country_alternatives)) {
+            for (alt_name in country_alternatives[[other_country]]) {
+              if (grepl(alt_name, country_background, ignore.case = TRUE)) {
+                related_countries <- c(related_countries, other_country)
+                break  # Found a match, no need to check other alternatives
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  # Store the relationships for this country
+  country_relationships[[country_name]] <- related_countries
+}
+```
+
+```{r create_matrix, echo=FALSE}
+# Convert the relationships to a matrix format
+countries_list <- unique(names(country_relationships))
+n_countries <- length(countries_list)
+
+# Get continent information for each country
+country_continents <- sapply(countries_list, function(country) {
+  continent <- countries[[country]]$`Geography..Map.references`
+  if(is.null(continent) || is.na(continent)) {
+    return("Unknown")
+  } else {
+    # Standardize continent names
+    if(continent == "Central America and the Caribbean") {
+      return("Central America")
+    } else {
+      return(continent)
+    }
+  }
+})
+
+# Create and fill the relationship matrix
+relationship_matrix <- matrix(0, nrow = n_countries, ncol = n_countries)
+rownames(relationship_matrix) <- countries_list
+colnames(relationship_matrix) <- countries_list
+
+for (i in 1:n_countries) {
+  country_name <- countries_list[i]
+  related_countries <- country_relationships[[country_name]]
+  
+  for (related in related_countries) {
+    if (related %in% countries_list) {
+      j <- which(countries_list == related)
+      relationship_matrix[i, j] <- relationship_matrix[i, j] + 1
+    }
+  }
+}
+
+# Filter to include only countries with relationships
+has_relationships <- rowSums(relationship_matrix) > 0 | colSums(relationship_matrix) > 0
+filtered_matrix <- relationship_matrix[has_relationships, has_relationships]
+filtered_countries <- countries_list[has_relationships]
+filtered_continents <- country_continents[has_relationships]
+```
+
+## Create Network Visualization
+
+```{r network_plot, fig.width=12, fig.height=10, echo=FALSE}
+# Create an igraph object
+g <- graph_from_adjacency_matrix(filtered_matrix, mode = "directed", weighted = TRUE)
+
+# Set vertex attributes for continents
+V(g)$continent <- filtered_continents
+
+# Define continent colors
+continent_colors <- c(
+  "North America" = "#0D47A1",    # Dark blue
+  "Europe" = "#1976D2",           # Medium blue
+  "Asia" = "#B71C1C",             # Dark red
+  "Southeast Asia" = "#E57373",   # Lighter red
+  "Middle East" = "#E65100",      # Orange
+  "Africa" = "#2E7D32",           # Green
+  "Central America" = "#FBC02D",  # Yellow
+  "South America" = "#F9A825",    # Darker yellow
+  "AsiaEurope" = "#6A1B9A",       # Purple
+  "Oceania" = "#00838F",          # Teal
+  "Arctic Region" = "#004D40"     # Dark teal
+)
+
+# Calculate node sizes
+node_degrees <- degree(g, mode = "all")
+min_size <- 3
+max_size <- 14
+min_degree <- min(node_degrees)
+max_degree <- max(node_degrees)
+vertex_sizes <- min_size + (node_degrees - min_degree) * (max_size - min_size) / (max_degree - min_degree)
+
+# Create the nodes dataframe
+nodes_df <- data.frame(
+  id = 1:length(V(g)),
+  label = V(g)$name,
+  group = V(g)$continent,
+  value = vertex_sizes,
+  title = paste0("<p><b>", V(g)$name, "</b><br>",
+                "Continent: ", V(g)$continent, "<br>",
+                "Connections: ", node_degrees, "</p>")
+)
+
+# Add color information separately to avoid data.frame conversion issues
+nodes_df$color <- lapply(V(g)$continent, function(cont) {
+  if(cont %in% names(continent_colors)) {
+    list(
+      background = continent_colors[cont],
+      border = continent_colors[cont],
+      highlight = list(
+        background = continent_colors[cont],
+        border = "#FFFF00"
+      )
+    )
+  } else {
+    list(
+      background = "#808080",
+      border = "#808080",
+      highlight = list(
+        background = "#808080",
+        border = "#FFFF00"
+      )
+    )
+  }
+})
+
+edges_df <- as.data.frame(get.edgelist(g, names = FALSE))
+colnames(edges_df) <- c("from", "to")
+
+# Create interactive network visualization
+visNetwork(nodes_df, edges_df, main = "Country Relationships Network") %>%
+  visOptions(
+    highlightNearest = list(
+      enabled = TRUE,
+      degree = 1,
+      hover = TRUE
+    ),
+    selectedBy = list(
+      variable = "group",
+      values = unique(V(g)$continent),
+      multiple = TRUE,
+      highlight = TRUE,
+      main = "Continent"
+    )
+  ) %>%
+  visEdges(
+    color = list(
+      color = "#202020",
+      highlight = "#202020"
+    )
+  ) %>%
+  visPhysics(
+    stabilization = list(
+      enabled = TRUE,
+      iterations = 100,
+      fit = TRUE,
+      onlyDynamicEdges = FALSE,
+      updateInterval = 50
+    ),
+    barnesHut = list(
+      gravitationalConstant = -2000,
+      springConstant = 0.04,
+      springLength = 95,
+      damping = 0.5
+    ),
+    minVelocity = 0.75,
+    maxVelocity = 50,
+    solver = "barnesHut"
+  ) %>%
+  visLayout(
+    randomSeed = 1,
+    improvedLayout = TRUE
+  ) %>%
+  visInteraction(
+    hover = TRUE,
+    hoverConnectedEdges = TRUE,
+    selectConnectedEdges = TRUE,
+    dragNodes = TRUE,
+    dragView = TRUE,
+    zoomView = TRUE
+  ) %>%
+  visLegend(
+    useGroups = FALSE,
+    addNodes = list(
+      list(label = "North America", color = list(background = "#0D47A1", border = "#0D47A1"), shape = "dot", size = 10),
+      list(label = "Europe", color = list(background = "#1976D2", border = "#1976D2"), shape = "dot", size = 10),
+      list(label = "Asia", color = list(background = "#B71C1C", border = "#B71C1C"), shape = "dot", size = 10),
+      list(label = "Southeast Asia", color = list(background = "#E57373", border = "#E57373"), shape = "dot", size = 10),
+      list(label = "Middle East", color = list(background = "#E65100", border = "#E65100"), shape = "dot", size = 10),
+      list(label = "Africa", color = list(background = "#2E7D32", border = "#2E7D32"), shape = "dot", size = 10),
+      list(label = "Central America", color = list(background = "#FBC02D", border = "#FBC02D"), shape = "dot", size = 10),
+      list(label = "South America", color = list(background = "#F9A825", border = "#F9A825"), shape = "dot", size = 10),
+      # list(label = "AsiaEurope", color = list(background = "#6A1B9A", border = "#6A1B9A"), shape = "dot", size = 10),
+      list(label = "Oceania", color = list(background = "#00838F", border = "#00838F"), shape = "dot", size = 10),
+      list(label = "Arctic Region", color = list(background = "#004D40", border = "#004D40"), shape = "dot", size = 10)
+    ),
+    width = 0.15,
+    position = "left",
+    main = "Continents"
+  )
+```
